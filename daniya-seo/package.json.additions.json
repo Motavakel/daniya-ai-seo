@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "ipaddr.js": "2.2.0"
+  },
+  "scripts": {
+    "netlog:smoke": "tsx scripts/netlog-parse-smoke.ts",
+    "network:capture:smoke": "tsx scripts/network-capture-smoke.ts"
+  }
+}

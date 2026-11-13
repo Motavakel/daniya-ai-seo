@@ -15,7 +15,7 @@ import * as schema from '../../database/schema';
 import { ClientCertRepository } from './client-cert.repository';
 import { REDIS } from '../../redis/redis.constants';
 import { DB } from '../../database/database.constants';
-import { CertificateAuthorityService } from './certificate-authority.service';
+import { CertificateAuthorityService } from '../certificate-authority/certificate-authority.service';
 
 interface TokenRecord {
   clientId: string;
@@ -363,4 +363,5 @@ export class AuthService {
       scopes: record.scopes,
     };
   }
+
 }

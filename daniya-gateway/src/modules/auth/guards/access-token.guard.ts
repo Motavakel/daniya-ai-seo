@@ -7,8 +7,8 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { AuthService } from '../auth.service';
-import { sha256FingerprintToBase64Url } from '../mtls/cert-fingerprint';
 import { PUBLIC_KEY, SCOPES_KEY } from '../../../common/decorators/common.decorator';
+import { sha256FingerprintToBase64Url } from '../../../common/mtls/cert-fingerprint';
 
 interface AuthenticatedRequest extends Request {
   authContext?: {

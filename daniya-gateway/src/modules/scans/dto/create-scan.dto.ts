@@ -1,18 +1,28 @@
-import { IsIn, IsNotEmpty, IsString, IsUrl } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  IsUrl,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateScanDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
+  portal_user_id!: number;
+
   @IsString()
   @IsNotEmpty()
-  portal_user_id!: string;
-
-  @IsUrl({ require_tld: true, require_protocol: true })
+  @MaxLength(2048)
+  @IsUrl({
+    protocols: ['https'],
+    require_protocol: true,
+    require_tld: true,
+  })
   page_url!: string;
-
-  /**
-   * پلن مؤثر کاربر — فقط مقدار استخراج‌شده در سرور WordPress (پشت mTLS + Token)
-   * قابل اعتماد است. Gateway خودش تصمیم‌گیرنده نیست.
-   */
-  @IsString()
-  @IsIn(['free', 'pro'])
-  effective_plan!: 'free' | 'pro';
 }

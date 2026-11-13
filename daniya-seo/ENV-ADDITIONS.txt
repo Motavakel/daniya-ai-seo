@@ -1,0 +1,26 @@
+# Add these to your existing .env. Do not replace the file.
+
+# Required in the production Worker. The Compose file supplies this value
+# internally; for local testing it may be empty and the browser connects direct.
+BROWSER_PROXY_URL=
+BROWSER_EGRESS_REGION=local
+
+# Chrome binary path inside the Worker container or local machine.
+# Windows local example: C:\Program Files\Google\Chrome\Application\chrome.exe
+# Linux local example: /usr/bin/google-chrome-stable
+CHROME_PATH=
+CHROME_NO_SANDBOX=false
+
+# Network capture
+NETWORK_OBSERVATION_MS=20000
+NETWORK_NETLOG_MAX_BYTES=104857600
+NETWORK_ARTIFACT_TTL_DAYS=1
+NETWORK_DIAGNOSTIC_MAX_REQUESTS=20000
+
+# Workflow / retention
+SCAN_RETENTION_DAYS=90
+ARTIFACT_RETENTION_INTERVAL_MS=3600000
+OUTBOX_POLL_INTERVAL_MS=1000
+OUTBOX_CLAIM_BATCH_SIZE=20
+OUTBOX_LEASE_SECONDS=60
+ENGINE_MAX_ATTEMPTS=3

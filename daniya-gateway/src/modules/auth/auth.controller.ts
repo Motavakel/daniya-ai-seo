@@ -10,10 +10,10 @@ import {
 } from '@nestjs/common';
 import { EnrollClientDto } from './dto/enroll-client.dto';
 import { ClientCredentialsDto } from './dto/token-request.dto';
-import { sha256FingerprintToBase64Url } from './mtls/cert-fingerprint';
 import { AuthService } from './auth.service';
 import { Public } from '../../common/decorators/common.decorator';
 import { AccessTokenGuard } from './guards/access-token.guard';
+import { sha256FingerprintToBase64Url } from '../../common/mtls/cert-fingerprint';
 
 @UseGuards(AccessTokenGuard)
 @Controller('oauth')

@@ -1,26 +1,41 @@
-import { BadRequestException, Body, Controller, Headers, Post } from '@nestjs/common';
-import { ClientCert } from '../common/decorators/client-cert.decorator';
-import { RequireScopes } from '../common/decorators/scopes.decorator';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Post,
+} from '@nestjs/common';
+
+
 import { CreateScanDto } from './dto/create-scan.dto';
 import { ScansService } from './scans.service';
+import { CurrentClientId, RequireScopes } from '../../common/decorators/common.decorator';
 
 @Controller('scans')
 export class ScansController {
   constructor(private readonly scans: ScansService) {}
 
   @Post()
+  @HttpCode(HttpStatus.ACCEPTED)
   @RequireScopes('scans:create')
   async create(
+    @CurrentClientId() clientId: string,
     @Body() dto: CreateScanDto,
-    @Headers('idempotency-key') idempotencyKey: string | undefined,
-    @ClientCert() clientId: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    if (!idempotencyKey || idempotencyKey.trim().length === 0) {
-      throw new BadRequestException('Idempotency-Key header is required');
+    const key = idempotencyKey?.trim();
+
+    if (!key || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(key)) {
+      throw new BadRequestException('A valid Idempotency-Key header is required');
     }
-    if (idempotencyKey.length > 128) {
-      throw new BadRequestException('Idempotency-Key is too long');
-    }
-    return this.scans.create({ clientId, dto, idempotencyKey });
+
+    return this.scans.create({
+      clientId,
+      portalUserId: dto.portal_user_id,
+      pageUrl: dto.page_url,
+      idempotencyKey: key,
+    });
   }
 }

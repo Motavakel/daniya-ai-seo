@@ -1,8 +1,9 @@
-export function hexColonToBase64Url(x5tHex: string): string {
-  const clean = x5tHex.replace(/:/g, '').trim();
-  if (!/^[0-9a-fA-F]{64}$/.test(clean)) {
-    throw new Error('Invalid SHA-256 fingerprint hex length');
+export function sha256FingerprintToBase64Url(value: string): string {
+  const normalized = value.replace(/:/g, '').toLowerCase();
+
+  if (!/^[a-f0-9]{64}$/.test(normalized)) {
+    throw new Error('Invalid SHA-256 certificate fingerprint');
   }
-  const buf = Buffer.from(clean, 'hex');
-  return buf.toString('base64url');
+
+  return Buffer.from(normalized, 'hex').toString('base64url');
 }
