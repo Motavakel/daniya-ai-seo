@@ -1,0 +1,13 @@
+services:
+  gateway:
+    volumes:
+      - ./.local/pki/client-ca:/run/daniya-pki/client-ca
+      - ./.local/pki/root-ca/certs/ca.cert.pem:/run/daniya-pki/root-ca/ca.cert.pem:ro
+
+  caddy:
+    ports:
+      - "443:443"
+      - "8444:8444"
+    volumes:
+      - ./.local/pki/gateway:/etc/caddy/gateway:ro
+      - ./.local/pki/client-ca/certs/ca.cert.pem:/etc/caddy/client-ca/ca.cert.pem:ro

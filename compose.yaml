@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-daniya}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-daniya}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks: [internal]
+    expose: ["5432"]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks: [internal]
+    expose: ["6379"]
+
+  gateway:
+    build: .
+    restart: unless-stopped
+    env_file: [.env]
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      CA_DIR: /run/daniya-pki/client-ca
+      CA_CONFIG_PATH: /run/daniya-pki/client-ca/openssl.cnf
+      CA_CERT_PATH: /run/daniya-pki/client-ca/certs/ca.cert.pem
+      CA_KEY_PATH: /run/daniya-pki/client-ca/private/ca.key.pem
+      CA_ROOT_CERT_PATH: /run/daniya-pki/root-ca/ca.cert.pem
+      CA_KEY_PASSPHRASE: ${DANIYA_CLIENT_CA_PASSPHRASE:?set DANIYA_CLIENT_CA_PASSPHRASE}
+      OAUTH_CLIENT_CERT_TTL_DAYS: "365"
+    networks: [internal, edge]
+    expose: ["3000"]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - gateway
+    networks: [edge]
+    environment:
+      GATEWAY_DOMAIN: ${GATEWAY_DOMAIN:-gateway.local}
+    volumes:
+      - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pg_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+    internal: true
+  edge: {}
