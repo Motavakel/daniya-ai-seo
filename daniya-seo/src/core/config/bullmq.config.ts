@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { BullRootModuleOptions } from '@nestjs/bullmq';
+import type { BullRootModuleOptions } from '@nestjs/bullmq';
 
 export const getBullMqConfig = (
   config: ConfigService,
@@ -12,6 +12,11 @@ export const getBullMqConfig = (
     username: config.get<string>('REDIS_USERNAME') || undefined,
     password: config.get<string>('REDIS_PASSWORD') || undefined,
     db: config.get<number>('REDIS_DB', 0),
+
+    ...(config.get<boolean>('REDIS_TLS', false)
+      ? { tls: {} }
+      : {}),
+
     maxRetriesPerRequest: null,
     enableReadyCheck: true,
   },
@@ -21,18 +26,3 @@ export const getBullMqConfig = (
     removeOnFail: { age: 86400 },
   },
 });
-
-/* 
-export const LIGHTHOUSE_QUEUE = 'lighthouse';
-export const NETWORK_QUEUE = 'network';
-imports: [
-  BullModule.registerQueue({
-    name: LIGHTHOUSE_QUEUE,
-  }),
-]
-imports: [
-  BullModule.registerQueue({
-    name: NETWORK_QUEUE,
-  }),
-]
-*/

@@ -118,230 +118,212 @@ Caddy مقدار SHA-256 fingerprint را به صورت hex بدون colon ار�
 -------------------------
 
 ```
-daniya-ai-seo
-|-- daniya-gateway
-|   |-- src
-|   |   |-- common
-|   |   |   |-- decorators
+
+daniya-ai-seo   
+├── daniya-gateway                            
+|   ├── src                                       
+|   |   ├── common
+|   |   |   ├── decorators
 |   |   |   |   └── common.decorator.ts
 |   |   |   └── mtls
 |   |   |       └── cert-fingerprint.ts
-|   |   |-- config
-|   |   |   |-- config.module.ts
+|   |   ├── config
+|   |   |   ├── config.module.ts
 |   |   |   └── env.validation.ts
-|   |   |-- database
-|   |   |   |-- schema
-|   |   |   |   |-- auth.schema.ts
-|   |   |   |   |-- customers.schema.ts
-|   |   |   |   |-- index.ts
+|   |   ├── database
+|   |   |   ├── schema
+|   |   |   |   ├── auth.schema.ts
+|   |   |   |   ├── customers.schema.ts
+|   |   |   |   ├── index.ts
 |   |   |   |   └── support.schema.ts
-|   |   |   |-- database.constants.ts
+|   |   |   ├── database.constants.ts
 |   |   |   └── database.module.ts
-|   |   |-- modules
-|   |   |   |-- auth
-|   |   |   |   |-- dto
-|   |   |   |   |   |-- enroll-client.dto.ts
+|   |   ├── modules
+|   |   |   ├── auth
+|   |   |   |   ├── dto
+|   |   |   |   |   ├── enroll-client.dto.ts
 |   |   |   |   |   └── token-request.dto.ts
-|   |   |   |   |-- guards
+|   |   |   |   ├── guards
 |   |   |   |   |   └── access-token.guard.ts
-|   |   |   |   |-- auth.constants.ts
-|   |   |   |   |-- auth.controller.ts
-|   |   |   |   |-- auth.module.ts
-|   |   |   |   |-- auth.service.ts
+|   |   |   |   ├── auth.constants.ts
+|   |   |   |   ├── auth.controller.ts
+|   |   |   |   ├── auth.module.ts
+|   |   |   |   ├── auth.service.ts
 |   |   |   |   └── client-cert.repository.ts
-|   |   |   |-- certificate-authority
-|   |   |   |   |-- certificate-authority.module.ts
+|   |   |   ├── certificate-authority
+|   |   |   |   ├── certificate-authority.module.ts
 |   |   |   |   └── certificate-authority.service.ts
-|   |   |   |-- customers
-|   |   |   |   |-- customers.module.ts
+|   |   |   ├── customers
+|   |   |   |   ├── customers.module.ts
 |   |   |   |   └── customers.service.ts
 |   |   |   └── scans
-|   |   |       |-- dto
+|   |   |       ├── dto
 |   |   |       |   └── create-scan.dto.ts
-|   |   |       |-- scans.controller.ts
-|   |   |       |-- scans.module.ts
-|   |   |       |-- scans.service.ts
-|   |   |       |-- seo-client.service.ts
+|   |   |       ├── scans.controller.ts
+|   |   |       ├── scans.module.ts
+|   |   |       ├── scans.service.ts
+|   |   |       ├── seo-client.service.ts
 |   |   |       └── seo-jwt.service.ts
-|   |   |-- redis
-|   |   |   |-- redis.constants.ts
+|   |   ├── redis
+|   |   |   ├── redis.constants.ts
 |   |   |   └── redis.module.ts
-|   |   |-- app.module.ts
+|   |   ├── app.module.ts
 |   |   └── main.ts
-|   |-- .env
-|   |-- .gitignore
-|   |-- .prettierrc
-|   |-- Dockerfile
-|   |-- eslint.config.mjs
-|   |-- nest-cli.json
-|   |-- package.json
-|   |-- package-lock.json
-|   |-- README.md
-|   |-- tsconfig.build.json
+|   ├── .env
+|   ├── .gitignore
+|   ├── .prettierrc
+|   ├── Dockerfile
+|   ├── eslint.config.mjs
+|   ├── nest-cli.json
+|   ├── package.json
+|   ├── package-lock.json
+|   ├── README.md
+|   ├── tsconfig.build.json
 |   └── tsconfig.json
-|-- daniya-seo
-|   |-- scripts
-|   |   |-- check-runtime.ts
-|   |   |-- lighthouse-smoke.ts
-|   |   |-- netlog-parse-smoke.ts
-|   |   |-- network-audit.cjs
-|   |   |-- network-capture-smoke.ts
+├── daniya-seo
+|   ├── scripts
+|   |   ├── check-runtime.ts
+|   |   ├── lighthouse-smoke.ts
+|   |   ├── netlog-parse-smoke.ts
+|   |   ├── network-audit.cjs
+|   |   ├── network-capture-smoke.ts
 |   |   └── network-diagnostic.cjs
-|   |-- src
-|   |   |-- core
-|   |   |   |-- config
-|   |   |   |   |-- bullmq.config.ts
-|   |   |   |   |-- config.module.ts
-|   |   |   |   |-- drizzle.config.ts
-|   |   |   |   └── validation.schema.ts
-|   |   |   └── security
-|   |   |-- infrastructure
-|   |   |   |-- database
-|   |   |   |   |-- repositories
-|   |   |   |   |   |-- lighthouse-audits.repository.ts
-|   |   |   |   |   |-- lighthouse-reports.repository.ts
-|   |   |   |   |   |-- network-captures.repository.ts
-|   |   |   |   |   |-- network-findings.repository.ts
-|   |   |   |   |   |-- outbox-events.repository.ts
-|   |   |   |   |   |-- report-artifacts.repository.ts
-|   |   |   |   |   |-- reports.repository.ts
-|   |   |   |   |   |-- repositories.module.ts
-|   |   |   |   |   |-- scan-engine-runs.repository.ts
-|   |   |   |   |   |-- scan-retention.repository.ts
-|   |   |   |   |   |-- scans.repository.ts
-|   |   |   |   |   └── scan-workflow.repository.ts
-|   |   |   |   |-- schema
-|   |   |   |   |   |-- column.helpers.ts
-|   |   |   |   |   |-- enums.schema.ts
-|   |   |   |   |   |-- index.ts
-|   |   |   |   |   |-- lighthouse-audits.schema.ts
-|   |   |   |   |   |-- lighthouse-reports.schema.ts
-|   |   |   |   |   |-- lighthouse-results.schema.ts
-|   |   |   |   |   |-- network-findings.schema.ts
-|   |   |   |   |   |-- network-requests.schema.ts
-|   |   |   |   |   |-- network-runs.schema.ts
-|   |   |   |   |   |-- outbox-events.schema.ts
-|   |   |   |   |   |-- relations.schema.ts
-|   |   |   |   |   |-- report-artifacts.schema.ts
-|   |   |   |   |   |-- reports.schema.ts
-|   |   |   |   |   |-- scan-engine-runs.schema.ts
-|   |   |   |   |   |-- scans.schema.ts
-|   |   |   |   |   └── schema.types.ts
-|   |   |   |   |-- database.constants.ts
-|   |   |   |   |-- database.module.ts
+|   ├── src
+|   |   ├── certs
+|   |   |   └── gateway-public.pem
+|   |   ├── core
+|   |   |   └── config
+|   |   |       ├── bullmq.config.ts
+|   |   |       ├── config.module.ts
+|   |   |       ├── drizzle.config.ts
+|   |   |       └── validation.schema.ts
+|   |   ├── infrastructure
+|   |   |   ├── database
+|   |   |   |   ├── schema
+|   |   |   |   |   ├── access
+|   |   |   |   |   |   ├── customer-plan-cycles.schema.ts
+|   |   |   |   |   |   ├── customers.schema.ts
+|   |   |   |   |   |   ├── page-cycle-slots.schema.ts
+|   |   |   |   |   |   └── pages.schema.ts
+|   |   |   |   |   ├── engine
+|   |   |   |   |   |   ├── lighthouse-reports.schema.ts
+|   |   |   |   |   |   ├── network-runs.schema.ts
+|   |   |   |   |   |   └── report-artifacts.schema.ts
+|   |   |   |   |   ├── workflow
+|   |   |   |   |   |   ├── idempotency-records.schema.ts
+|   |   |   |   |   |   ├── outbox-events.schema.ts
+|   |   |   |   |   |   ├── scan-engine-runs.schema.ts
+|   |   |   |   |   |   └── scans.schema.ts
+|   |   |   |   |   ├── enums.schema.ts
+|   |   |   |   |   └── index.ts
+|   |   |   |   ├── database.constants.ts
+|   |   |   |   ├── database.module.ts
 |   |   |   |   └── drizzle.service.ts
-|   |   |   └── queue
-|   |   |       |-- queue.constants.ts
-|   |   |       |-- queue.module.ts
-|   |   |       └── worker-queues.module.ts
-|   |   |-- modules
-|   |   |   |-- diagnostics
-|   |   |   |   |-- application
-|   |   |   |   |   |-- diagnostics.module.ts
-|   |   |   |   |   └── network-diagnostics.service.ts
-|   |   |   |   └── domain
-|   |   |   |       └── network-diagnostic.engine.ts
-|   |   |   |-- lighthouse
-|   |   |   |   |-- application
-|   |   |   |   |   |-- lighthouse-engine.module.ts
-|   |   |   |   |   └── lighthouse-engine.service.ts
-|   |   |   |   |-- domain
-|   |   |   |   |   |-- lighthouse-execution.error.ts
-|   |   |   |   |   └── lighthouse-report.parser.ts
-|   |   |   |   |-- infrastructure
-|   |   |   |   |   |-- lighthouse-process.runner.ts
-|   |   |   |   |   └── local-artifact-storage.service.ts
-|   |   |   |   |-- types
-|   |   |   |   |-- lighthouse.module.ts
-|   |   |   |   |-- lighthouse.parser.ts
-|   |   |   |   |-- lighthouse.processor.ts
-|   |   |   |   |-- lighthouse.repository.ts
-|   |   |   |   |-- lighthouse.runner.ts
-|   |   |   |   |-- lighthouse-queue.module.ts
-|   |   |   |   └── lighthouse-worker.module.ts
-|   |   |   |-- network
-|   |   |   |   |-- application
-|   |   |   |   |   |-- network-engine.module.ts
-|   |   |   |   |   └── network-engine.service.ts
-|   |   |   |   |-- domain
-|   |   |   |   |   |-- netlog-parser.ts
-|   |   |   |   |   └── network-engine.error.ts
-|   |   |   |   |-- infrastructure
-|   |   |   |   |   |-- chrome-netlog.runner.ts
-|   |   |   |   |   └── network-artifact-storage.service.ts
-|   |   |   |   |-- rules
-|   |   |   |   |-- types
-|   |   |   |   |-- netlog.parser.ts
-|   |   |   |   |-- netlog.runner.ts
-|   |   |   |   |-- network.module.ts
-|   |   |   |   |-- network.processor.ts
-|   |   |   |   |-- network.repository.ts
-|   |   |   |   |-- network-normalizer.service.ts
-|   |   |   |   |-- network-queue.module.ts
-|   |   |   |   └── network-worker.module.ts
-|   |   |   |-- reports
-|   |   |   |   |-- reports.controller.ts
-|   |   |   |   |-- reports.module.ts
-|   |   |   |   |-- reports.repository.ts
+|   |   |   ├── outbox
+|   |   |   |   ├── outbox.module.ts
+|   |   |   |   └── outbox-publisher.service.ts
+|   |   |   ├── queue
+|   |   |   |   ├── queue.constants.ts
+|   |   |   |   └── queue.module.ts
+|   |   |   └── storage
+|   |   |       └── artifact-storage.service.ts
+|   |   ├── modules
+|   |   |   ├── access
+|   |   |   |   ├── services
+|   |   |   |   |   ├── access.service.ts
+|   |   |   |   |   ├── cycle-lifecycle.service.ts
+|   |   |   |   |   ├── plan-resolver.service.ts
+|   |   |   |   |   └── quota.service.ts
+|   |   |   |   ├── access.module.ts
+|   |   |   |   └── access.repository.ts
+|   |   |   ├── api
+|   |   |   |   ├── controllers
+|   |   |   |   |   ├── account.controller.ts
+|   |   |   |   |   ├── report.controller.ts
+|   |   |   |   |   └── scan-controller.ts
+|   |   |   |   ├── decorators
+|   |   |   |   |   ├── current-principal.decorator.ts
+|   |   |   |   |   ├── idempotency-key.decorator.ts
+|   |   |   |   |   └── require-gateway-scopes.decorator.ts
+|   |   |   |   ├── dto
+|   |   |   |   |   ├── create-scan.dto.ts
+|   |   |   |   |   ├── repurchase.dto.ts
+|   |   |   |   |   └── upgrade-plan.dto.ts
+|   |   |   |   ├── gurds
+|   |   |   |   |   ├── gateway-auth.guard.ts
+|   |   |   |   |   └── gateway-scope.guard.ts
+|   |   |   |   ├── api.module.ts
+|   |   |   |   └── gateway-context.ts
+|   |   |   ├── engines
+|   |   |   |   ├── browser
+|   |   |   |   |   └── browser-runner.service.ts
+|   |   |   |   ├── console
+|   |   |   |   |   ├── console.engine.ts
+|   |   |   |   |   └── console.parser.ts
+|   |   |   |   ├── lighthouse
+|   |   |   |   |   ├── lighthouse.engine.ts
+|   |   |   |   |   └── lighthouse.parser.ts
+|   |   |   |   ├── network
+|   |   |   |   |   ├── network.engine.ts
+|   |   |   |   |   └── network.parser.ts
+|   |   |   |   ├── performance
+|   |   |   |   |   ├── performance.engine.ts
+|   |   |   |   |   └── performance.parser.ts
+|   |   |   |   └── engines.module.ts
+|   |   |   ├── reports
+|   |   |   |   ├── reports.controller.ts
+|   |   |   |   ├── reports.module.ts
+|   |   |   |   ├── reports.repository.ts
 |   |   |   |   └── reports.service.ts
-|   |   |   |-- security
-|   |   |   |   |-- security.module.ts
+|   |   |   ├── security
+|   |   |   |   ├── security.module.ts
 |   |   |   |   └── target-url.validator.ts
 |   |   |   └── workflow
-|   |   |       |-- api
-|   |   |       |   |-- dto
-|   |   |       |   |   └── create-scan.dto.ts
-|   |   |       |   |-- report-finalizer.service.ts
-|   |   |       |   |-- scan-workflow.controller.ts
-|   |   |       |   └── workflow-api.module.ts
-|   |   |       |-- application
-|   |   |       |   |-- scan-workflow.service.ts
-|   |   |       |   └── workflow.module.ts
-|   |   |       |-- infrastructure
-|   |   |       |   |-- artifact-retention.service.ts
-|   |   |       |   |-- browser-execution-lock.service.ts
-|   |   |       |   |-- lighthouse.processor.ts
-|   |   |       |   |-- network.processor.ts
-|   |   |       |   └── outbox-publisher.service.ts
-|   |   |       └── transport
-|   |   |           |-- gateway-context.guard.ts
-|   |   |           └── gateway-context.ts
-|   |   |-- worker
-|   |   |   |-- worker.main.ts
+|   |   |       ├── services
+|   |   |       |   ├── idempotency.service.ts
+|   |   |       |   ├── page-resolver.service.ts
+|   |   |       |   ├── slot-reservation.service.ts
+|   |   |       |   └── workflow.service.ts
+|   |   |       ├── workflow.module.ts
+|   |   |       └── workflow.repository.ts
+|   |   ├── worker
+|   |   |   ├── scan.processor.ts
+|   |   |   ├── scan-orchestrator.service.ts
+|   |   |   ├── scan-results.repository.ts
+|   |   |   ├── worker.main.ts
 |   |   |   └── worker.module.ts
-|   |   |-- app.module.ts
+|   |   ├── app.module.ts
 |   |   └── main.ts
-|   |-- .dockerignore
-|   |-- .env
-|   |-- .gitignore
-|   |-- .prettierrc
-|   |-- Apply-QC-Fixes.ps1
-|   |-- drizzle.config.ts
-|   |-- ENV-ADDITIONS.txt
-|   |-- jest.config.ts
-|   |-- nest-cli.json
-|   |-- oxlint.json
-|   |-- package.json
-|   |-- package.json.additions.json
-|   |-- package-lock.json
-|   |-- tsconfig.build.json
+|   ├── .dockerignore
+|   ├── .env
+|   ├── .gitignore
+|   ├── .prettierrc
+|   ├── Apply-QC-Fixes.ps1
+|   ├── drizzle.config.ts
+|   ├── ENV-ADDITIONS.txt
+|   ├── jest.config.ts
+|   ├── nest-cli.json
+|   ├── oxlint.json
+|   ├── package.json
+|   ├── package.json.additions.json
+|   ├── package-lock.json
+|   ├── tsconfig.build.json
 |   └── tsconfig.json
-|-- scripts
-|   |-- pki
-|   |   |-- config
-|   |   |   |-- intermediate-ca.cnf
+├── scripts
+|   ├── pki
+|   |   ├── config
+|   |   |   ├── intermediate-ca.cnf
 |   |   |   └── root-ca.cnf
-|   |   |-- init-local-pki.ps1
+|   |   ├── init-local-pki.ps1
 |   |   └── new-test-client.ps1
 |   └── show-tree.ps1
-|-- .dockerignore
-|-- .env.pki
-|-- .gitignore.pki.snippet
-|-- Caddyfile
-|-- compose.local.yaml
-|-- compose.prod.yaml
-|-- compose.yaml
+├── .dockerignore
+├── .env.pki
+├── .gitignore.pki.snippet
+├── Caddyfile
+├── compose.local.yaml
+├── compose.prod.yaml
+├── compose.yaml
 └── README.md
-
 
 ```

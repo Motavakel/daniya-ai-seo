@@ -1,3 +1,4 @@
+
 import {
   BadGatewayException,
   GatewayTimeoutException,
@@ -110,10 +111,7 @@ export class SeoClientService implements OnModuleDestroy {
       );
     }
 
-    if (
-      response.statusCode >= 400 &&
-      response.statusCode < 500
-    ) {
+    if (response.statusCode >= 400 && response.statusCode < 500) {
       throw new HttpException(
         {
           statusCode: response.statusCode,
@@ -183,7 +181,10 @@ export class SeoClientService implements OnModuleDestroy {
       );
 
       req.setTimeout(this.timeoutMs, () => {
-        const error = new Error('SEO request timed out') as NodeJS.ErrnoException;
+        const error = new Error(
+          'SEO request timed out',
+        ) as NodeJS.ErrnoException;
+
         error.code = 'ETIMEDOUT';
         req.destroy(error);
       });
