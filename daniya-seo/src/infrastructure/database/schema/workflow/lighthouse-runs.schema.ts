@@ -15,9 +15,11 @@ import {
 } from 'drizzle-orm/pg-core';
 import { scanEngineRuns } from './scan-engine-runs.schema';
 import { scans } from './scans.schema';
+import type { JsonObject, LighthouseAuditSummaries } from '../schema.types';
+import { lighthouseFormFactorEnum, lighthouseThrottlingMethodEnum } from '../enums.schema';
 
 
-export const lighthouseReports = pgTable(
+export const lighthouseRuns = pgTable(
   'lighthouse_reports',
   {
     id: uuid('id').defaultRandom().primaryKey(),
@@ -38,14 +40,12 @@ export const lighthouseReports = pgTable(
       length: 64,
     }),
 
-    formFactor: varchar('form_factor', {
-      length: 16,
-    }),
+    formFactor: lighthouseFormFactorEnum('form_factor'),
 
-    throttlingMethod: varchar('throttling_method', {
-      length: 32,
-    }),
-
+    throttlingMethod: lighthouseThrottlingMethodEnum(
+      'throttling_method',
+    ),
+    
     requestedUrl: text('requested_url'),
     finalUrl: text('final_url'),
 

@@ -4,7 +4,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 
-import { lookup } from 'node:dns/promises';
+import { Resolver } from 'node:dns/promises';
 import { BlockList, isIP } from 'node:net';
 
 export interface ResolvedTargetAddress {
@@ -30,9 +30,9 @@ const BLOCKED_HOST_SUFFIXES = [
   'invalid',
   'example',
   'onion',
+  'arpa',
+  'alt',
 ];
-
-const blockedIPv4 = new BlockList();
 
 const BLOCKED_IPV4_RANGES: Array<[string, number]> = [
   ['0.0.0.0', 8],
@@ -52,6 +52,15 @@ const BLOCKED_IPV4_RANGES: Array<[string, number]> = [
   ['240.0.0.0', 4],
 ];
 
+const BLOCKED_IPV6_RANGES: Array<[string, number]> = [
+  ['2001::', 23],
+  ['2001:db8::', 32],
+  ['2002::', 16],
+  ['3fff::', 20],
+];
+
+const blockedIPv4 = new BlockList();
+
 for (const [network, prefix] of BLOCKED_IPV4_RANGES) {
   blockedIPv4.addSubnet(network, prefix, 'ipv4');
 }
@@ -61,15 +70,28 @@ globalIPv6.addSubnet('2000::', 3, 'ipv6');
 
 const blockedIPv6 = new BlockList();
 
-const BLOCKED_IPV6_RANGES: Array<[string, number]> = [
-  ['2001::', 23],
-  ['2001:db8::', 32],
-  ['2002::', 16],
-  ['3fff::', 20],
-];
-
 for (const [network, prefix] of BLOCKED_IPV6_RANGES) {
   blockedIPv6.addSubnet(network, prefix, 'ipv6');
+}
+
+function getDnsErrorCode(error: unknown): string | undefined {
+  if (
+    !error ||
+    typeof error !== 'object' ||
+    !('code' in error)
+  ) {
+    return undefined;
+  }
+
+  return typeof error.code === 'string'
+    ? error.code
+    : undefined;
+}
+
+function isMissingDnsRecord(error: unknown): boolean {
+  const code = getDnsErrorCode(error);
+
+  return code === 'ENODATA' || code === 'ENOTFOUND';
 }
 
 @Injectable()
@@ -79,13 +101,18 @@ export class TargetUrlValidator {
       throw new BadRequestException('Invalid target URL.');
     }
 
+    if (
+      input.length === 0 ||
+      input.length > MAX_URL_LENGTH ||
+      /[\u0000-\u001F\u007F]/.test(input)
+    ) {
+      throw new BadRequestException('Invalid target URL.');
+    }
+
     const rawUrl = input.trim();
 
-    if (
-      rawUrl.length === 0 ||
-      rawUrl.length > MAX_URL_LENGTH
-    ) {
-      throw new BadRequestException('Invalid target URL length.');
+    if (!rawUrl || rawUrl.length > MAX_URL_LENGTH) {
+      throw new BadRequestException('Invalid target URL.');
     }
 
     let parsedUrl: URL;
@@ -134,10 +161,21 @@ export class TargetUrlValidator {
         'Credentials in target URLs are not allowed.',
       );
     }
+
+    const authority =
+      url.href
+        .slice(url.protocol.length + 2)
+        .split(/[/?#]/, 1)[0] ?? '';
+
+    if (authority.includes('@')) {
+      throw new BadRequestException(
+        'Credentials in target URLs are not allowed.',
+      );
+    }
   }
 
   private validatePort(url: URL): void {
-    if (url.port && url.port !== '443') {
+    if (url.port !== '') {
       throw new BadRequestException(
         'Only the default HTTPS port is supported.',
       );
@@ -166,9 +204,24 @@ export class TargetUrlValidator {
       );
     }
 
-    if (!hostname.includes('.')) {
+    if (hostname.length > 253 || !hostname.includes('.')) {
       throw new BadRequestException(
-        'A public domain name is required.',
+        'A valid public domain name is required.',
+      );
+    }
+
+    const labels = hostname.split('.');
+
+    const validLabels = labels.every(
+      (label) =>
+        label.length > 0 &&
+        label.length <= 63 &&
+        /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
+    );
+
+    if (!validLabels) {
+      throw new BadRequestException(
+        'Invalid target hostname.',
       );
     }
 
@@ -188,41 +241,79 @@ export class TargetUrlValidator {
   private async resolveHostname(
     hostname: string,
   ): Promise<ResolvedTargetAddress[]> {
-    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const resolver = new Resolver();
+
+    let timedOut = false;
+
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      resolver.cancel();
+    }, DNS_TIMEOUT_MS);
 
     try {
-      const dnsLookup = lookup(hostname, {
-        all: true,
-        verbatim: true,
-      });
-
-      const timeoutPromise = new Promise<never>(
-        (_, reject) => {
-          timeout = setTimeout(() => {
-            reject(
-              new ServiceUnavailableException(
-                'Target DNS resolution timed out.',
-              ),
-            );
-          }, DNS_TIMEOUT_MS);
-        },
-      );
-
-      const results = await Promise.race([
-        dnsLookup,
-        timeoutPromise,
+      const [ipv4Result, ipv6Result] = await Promise.allSettled([
+        resolver.resolve4(hostname),
+        resolver.resolve6(hostname),
       ]);
 
-      if (!results.length) {
+      if (timedOut) {
+        throw new ServiceUnavailableException(
+          'Target DNS resolution timed out.',
+        );
+      }
+
+      const results = [ipv4Result, ipv6Result];
+
+      for (const result of results) {
+        if (
+          result.status === 'rejected' &&
+          !isMissingDnsRecord(result.reason)
+        ) {
+          throw new ServiceUnavailableException(
+            'Target DNS resolution failed.',
+          );
+        }
+      }
+
+      const addresses: ResolvedTargetAddress[] = [];
+
+      if (ipv4Result.status === 'fulfilled') {
+        for (const address of ipv4Result.value) {
+          addresses.push({
+            address,
+            family: 4,
+          });
+        }
+      }
+
+      if (ipv6Result.status === 'fulfilled') {
+        for (const address of ipv6Result.value) {
+          addresses.push({
+            address,
+            family: 6,
+          });
+        }
+      }
+
+      if (addresses.length === 0) {
         throw new BadRequestException(
           'Target hostname could not be resolved.',
         );
       }
 
-      return results.map((result) => ({
-        address: result.address,
-        family: result.family as 4 | 6,
-      }));
+      const uniqueAddresses = new Map<
+        string,
+        ResolvedTargetAddress
+      >();
+
+      for (const address of addresses) {
+        uniqueAddresses.set(
+          `${address.family}:${address.address}`,
+          address,
+        );
+      }
+
+      return [...uniqueAddresses.values()];
     } catch (error: unknown) {
       if (
         error instanceof BadRequestException ||
@@ -231,19 +322,24 @@ export class TargetUrlValidator {
         throw error;
       }
 
-      throw new BadRequestException(
-        'Target hostname could not be resolved.',
+      throw new ServiceUnavailableException(
+        'Target DNS resolution failed.',
       );
     } finally {
-      if (timeout) {
-        clearTimeout(timeout);
-      }
+      clearTimeout(timeout);
+      resolver.cancel();
     }
   }
 
   private validateResolvedAddresses(
     addresses: ResolvedTargetAddress[],
   ): void {
+    if (addresses.length === 0) {
+      throw new BadRequestException(
+        'Target hostname has no valid IP addresses.',
+      );
+    }
+
     const hasUnsafeAddress = addresses.some(
       ({ address, family }) =>
         !this.isPublicAddress(address, family),

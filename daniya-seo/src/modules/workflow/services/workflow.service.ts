@@ -1,7 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
+
 import { DrizzleService } from '../../../infrastructure/database/drizzle.service';
+
 import { AccessService } from '../../access/services/access.service';
+import type { PlanLevel } from '../../access/access.repository';
+
 import { WorkflowRepository } from '../workflow.repository';
+import type { ScanEngineType } from '../workflow.repository';
+
 import { IdempotencyService } from './idempotency.service';
 import { PageResolverService } from './page-resolver.service';
 import { SlotReservationService } from './slot-reservation.service';
@@ -12,6 +23,23 @@ export interface CreateScanInput {
   targetUrl: string;
   idempotencyKey: string;
 }
+
+export interface CreateScanResult {
+  scanId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  alreadyExisted: boolean;
+  createdAt: Date;
+}
+
+export interface GetScanStatusInput {
+  scanId: string;
+  customerId: string;
+}
+
+const PLAN_ENGINE_TYPES = {
+  basic: ['lighthouse'],
+  pro: ['lighthouse', 'network', 'console', 'chrome_performance'],
+} satisfies Record<PlanLevel, readonly ScanEngineType[]>;
 
 @Injectable()
 export class WorkflowService {
@@ -24,7 +52,8 @@ export class WorkflowService {
     private readonly slotReservationService: SlotReservationService,
   ) {}
 
-  async createScan(input: CreateScanInput) {
+  async createScan( input: CreateScanInput): Promise<CreateScanResult> {
+
     const normalizedUrl = this.pageResolverService.normalizeUrl(
       input.targetUrl,
     );
@@ -34,7 +63,6 @@ export class WorkflowService {
     });
 
     return this.drizzle.db.transaction(async (tx) => {
-      // 1. Check idempotency.
       const existingScan =
         await this.idempotencyService.findExistingScan(
           {
@@ -46,30 +74,20 @@ export class WorkflowService {
         );
 
       if (existingScan) {
-        return {
-          scan: existingScan,
-          reused: true,
-        };
+        return this.toCreateScanResult(existingScan, true);
       }
 
-      // 2. Get active plan cycle.
       const cycle =
         await this.accessService.getActiveCycleOrCreateInitial(
           input.customerId,
           tx,
         );
-
-      // 3. Resolve page.
+      const plan = this.accessService.resolvePlan(cycle);
       const { page } = await this.pageResolverService.resolve(
         input.customerId,
         normalizedUrl,
         tx,
       );
-
-      // 4. Resolve plan and enabled engines.
-      const plan = this.accessService.resolvePlan(cycle);
-
-      // 5. Reserve or reuse page slot.
       const { slot } = await this.slotReservationService.reserve(
         {
           pageId: page.id,
@@ -78,14 +96,18 @@ export class WorkflowService {
         tx,
       );
 
-      // 6. Determine scan attempt number.
+      if (!slot) {
+        throw new ConflictException(
+          'Page quota is not available.',
+        );
+      }
+
       const attemptNo =
         await this.workflowRepository.getNextScanAttemptNo(
           slot.id,
           tx,
         );
 
-      // 7. Create scan.
       const scan = await this.workflowRepository.createScan(
         {
           customerId: input.customerId,
@@ -101,12 +123,27 @@ export class WorkflowService {
         tx,
       );
 
+      if (!scan) {
+        throw new InternalServerErrorException(
+          'Failed to create scan.',
+        );
+      }
+
       // 8. Create engine runs.
-      await this.workflowRepository.createScanEngineRuns(
-        scan.id,
-        plan.engines,
-        tx,
-      );
+      const engineTypes = this.getEngineTypes(plan.planLevel);
+
+      const engineRuns =
+        await this.workflowRepository.createScanEngineRuns(
+          scan.id,
+          engineTypes,
+          tx,
+        );
+
+      if (engineRuns.length !== engineTypes.length) {
+        throw new InternalServerErrorException(
+          'Failed to initialize scan engines.',
+        );
+      }
 
       // 9. Save idempotency record.
       await this.idempotencyService.createRecord(
@@ -120,15 +157,82 @@ export class WorkflowService {
       );
 
       // 10. Create outbox event.
-      await this.workflowRepository.createOutboxEvent(
-        scan.id,
-        tx,
-      );
+      const outboxEvent =
+        await this.workflowRepository.createOutboxEvent(
+          scan.id,
+          tx,
+        );
+
+      if (!outboxEvent) {
+        throw new InternalServerErrorException(
+          'Failed to create scan event.',
+        );
+      }
+
+      return this.toCreateScanResult(scan, false);
+    });
+  }
+
+  async getScanStatus(input: GetScanStatusInput) {
+    return this.drizzle.db.transaction(async (tx) => {
+      // 1. Find scan owned by customer.
+      const scan =
+        await this.workflowRepository.findScanByIdForCustomer(
+          input.scanId,
+          input.customerId,
+          tx,
+        );
+
+      if (!scan) {
+        throw new NotFoundException('Scan not found.');
+      }
+
+      // 2. Get engine statuses.
+      const engineRuns =
+        await this.workflowRepository.findScanEngineRuns(
+          scan.id,
+          tx,
+        );
 
       return {
-        scan,
-        reused: false,
+        scanId: scan.id,
+        status: scan.status,
+        createdAt: scan.createdAt,
+        startedAt: scan.startedAt,
+        completedAt: scan.completedAt,
+        failureCode: scan.failureCode,
+
+        engines: engineRuns.map((engine) => ({
+          engineType: engine.engineType,
+          status: engine.status,
+          attempts: engine.attempts,
+          startedAt: engine.startedAt,
+          completedAt: engine.completedAt,
+          errorCode: engine.errorCode,
+        })),
       };
     });
+  }
+
+  private getEngineTypes(
+    planLevel: PlanLevel,
+  ): ScanEngineType[] {
+    return [...PLAN_ENGINE_TYPES[planLevel]];
+  }
+
+  private toCreateScanResult(
+    scan: {
+      id: string;
+      status: CreateScanResult['status'];
+      createdAt: Date;
+    },
+    alreadyExisted: boolean,
+  ): CreateScanResult {
+    return {
+      scanId: scan.id,
+      status: scan.status,
+      alreadyExisted,
+      createdAt: scan.createdAt,
+    };
   }
 }

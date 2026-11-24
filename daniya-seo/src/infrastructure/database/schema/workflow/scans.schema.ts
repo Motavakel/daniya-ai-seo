@@ -16,8 +16,6 @@ import { planLevelEnum, scanStatusEnum } from '../enums.schema';
 import { pageCycleSlots } from '../access/page-cycle-slots.schema';
 import { pages } from '../access/pages.schema';
 
-
-
 export const scans = pgTable(
   'scans',
   {
@@ -43,16 +41,13 @@ export const scans = pgTable(
 
     attemptNo: integer('attempt_no').notNull().default(1),
 
-    planLevelAtRequest: planLevelEnum('plan_level_at_request')
-      .notNull(),
+    planLevelAtRequest: planLevelEnum('plan_level_at_request').notNull(),
 
     gatewayTokenId: uuid('gateway_token_id').notNull(),
 
     targetUrl: text('target_url').notNull(),
 
-    status: scanStatusEnum('status')
-      .notNull()
-      .default('queued'),
+    status: scanStatusEnum('status').notNull().default('queued'),
 
     startedAt: timestamp('started_at', { withTimezone: true }),
 
@@ -71,25 +66,16 @@ export const scans = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex('scans_slot_attempt_no_uidx').on(
-      table.slotId,
-      table.attemptNo,
-    ),
+    uniqueIndex('scans_slot_attempt_no_uidx').on(table.slotId, table.attemptNo),
 
     index('scans_customer_created_at_idx').on(
       table.customerId,
       table.createdAt,
     ),
 
-    index('scans_page_created_at_idx').on(
-      table.pageId,
-      table.createdAt,
-    ),
+    index('scans_page_created_at_idx').on(table.pageId, table.createdAt),
 
-    check(
-      'scans_attempt_no_positive_chk',
-      sql`${table.attemptNo} > 0`,
-    ),
+    check('scans_attempt_no_positive_chk', sql`${table.attemptNo} > 0`),
 
     check(
       'scans_status_timestamps_chk',
@@ -112,6 +98,13 @@ export const scans = pgTable(
           AND ${table.completedAt} IS NOT NULL
         )
       `,
+    ),
+    check(
+      'scans_completed_at_check',
+      sql`
+    ${table.completedAt} IS NULL
+    OR ${table.completedAt} >= ${table.startedAt}
+  `,
     ),
   ],
 );

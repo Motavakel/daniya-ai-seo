@@ -213,9 +213,9 @@ export class OutboxPublisherService
       throw new Error('Invalid outbox payload.');
     }
 
-    const scanId = (
-      payload as Record<string, unknown>
-    ).scanId;
+  const scanId = (
+    payload as Record<string, unknown>
+  )['scanId'];
 
     if (
       typeof scanId !== 'string' ||

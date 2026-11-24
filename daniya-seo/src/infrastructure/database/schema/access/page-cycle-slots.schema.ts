@@ -1,10 +1,4 @@
-import {
-  pgTable,
-  timestamp,
-  uniqueIndex,
-  uuid,
-} from 'drizzle-orm/pg-core';
-
+import { pgTable, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import { pages } from './pages.schema';
 import { customerPlanCycles } from '../access/customer-plan-cycles.schema';
@@ -27,9 +21,7 @@ export const pageCycleSlots = pgTable(
         onDelete: 'restrict',
       }),
 
-    status: pageCycleSlotStatusEnum('status')
-      .notNull()
-      .default('RESERVED'),
+    status: pageCycleSlotStatusEnum('status').notNull().default('RESERVED'),
 
     createdAt: timestamp('created_at', {
       withTimezone: true,
@@ -42,10 +34,24 @@ export const pageCycleSlots = pgTable(
     })
       .notNull()
       .defaultNow(),
+    reservedAt: timestamp('reserved_at', {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    consumedAt: timestamp('consumed_at', {
+      withTimezone: true,
+    }),
+
+    releasedAt: timestamp('released_at', {
+      withTimezone: true,
+    }),
   },
-  (table) => ({
-    pageCycleUnique: uniqueIndex(
-      'page_cycle_slots_page_cycle_unique',
-    ).on(table.pageId, table.cycleId),
-  }),
+  (table) => [
+    uniqueIndex('page_cycle_slots_page_cycle_unique').on(
+      table.pageId,
+      table.cycleId,
+    ),
+  ],
 );

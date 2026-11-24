@@ -107,6 +107,16 @@ function stringOrNull(value: unknown): string | null {
   return String(value);
 }
 
+function numberOrStringOrNull(
+  value: unknown,
+): number | string | null {
+  if (typeof value === 'number' || typeof value === 'string') {
+    return value;
+  }
+
+  return null;
+}
+
 function formatBytes(bytes: number | null): string {
   if (bytes === null || !Number.isFinite(bytes)) {
     return 'Unknown';
@@ -137,7 +147,7 @@ function headerLines(headers: unknown): string[] {
       if (item && typeof item === 'object') {
         const header = item as Record<string, unknown>;
 
-        return [`${header.name ?? ''}: ${header.value ?? ''}`];
+        return [`${header['name'] ?? ''}: ${header['value'] ?? ''}`];
       }
 
       return [];
@@ -146,9 +156,10 @@ function headerLines(headers: unknown): string[] {
 
   if (typeof headers === 'object') {
     const headerObject = headers as Record<string, unknown>;
+    const nestedHeaders = headerObject['headers'];
 
-    if (Array.isArray(headerObject.headers)) {
-      return headerLines(headerObject.headers);
+    if (Array.isArray(nestedHeaders)) {
+      return headerLines(nestedHeaders);
     }
 
     return Object.entries(headerObject).map(
@@ -169,7 +180,7 @@ function readHeaders(
       line.match(/^HTTP\/\S+\s+(\d{3})/i) ||
       line.match(/^:status:\s*(\d{3})/i);
 
-    if (kind === 'response' && status) {
+    if (kind === 'response' && status?.[1]) {
       record.status = Number(status[1]);
       continue;
     }
@@ -195,7 +206,7 @@ function readHeaders(
       }
     } else {
       if (name === 'content-type') {
-        record.mimeType = value.split(';')[0].trim();
+        record.mimeType = value.split(';', 1)[0]?.trim() ?? '';
       }
 
       if (name === 'content-encoding') {
@@ -214,9 +225,10 @@ function inferResourceType(record: NetworkRequestRecord): string {
   const requestType = String(record.requestType || '').toLowerCase();
   const mime = String(record.mimeType || '').toLowerCase();
 
-  const url = String(record.url || '')
-    .toLowerCase()
-    .split(/[?#]/)[0];
+  const url =
+    String(record.url || '')
+      .toLowerCase()
+      .split(/[?#]/, 1)[0] ?? '';
 
   const destinations: Record<string, string> = {
     document: 'document',
@@ -310,11 +322,10 @@ export class NetworkParser {
       throw new Error('NetLog event type constants are missing.');
     }
 
-    const eventNames = new Map(
-      Object.entries(eventTypes).map(([name, id]) => [
-        Number(id),
-        name,
-      ]),
+    const eventNames = new Map<number, string>(
+      Object.entries(eventTypes).map(
+        ([name, id]) => [Number(id), name] as [number, string],
+      ),
     );
 
     const nameOf = (event: NetLogEvent) =>
@@ -345,41 +356,46 @@ export class NetworkParser {
     let firstRequestTick: number | null = null;
 
     const getRecord = (sourceId: string): NetworkRequestRecord => {
-      if (!records.has(sourceId)) {
-        records.set(sourceId, {
-          sourceId,
-          url: null,
-          initialUrl: null,
-          urlHistory: [],
-          redirects: [],
-          method: null,
-          requestType: null,
-          fetchDestination: null,
-          fetchMode: null,
-          referer: null,
-          initiator: null,
-          resourceType: 'unknown',
-          status: null,
-          mimeType: null,
-          contentEncoding: null,
-          contentLengthBytes: null,
-          preFilterBodyBytes: 0,
-          postFilterBodyBytes: 0,
-          rawReadEvents: 0,
-          filteredReadEvents: 0,
-          failed: false,
-          netError: null,
-          startTick: null,
-          endTick: null,
-          sizeBytes: null,
-          sizeSource: 'unknown',
-          durationMs: null,
-          redirectCount: 0,
-          offsetFromFirstRequestMs: null,
-        });
+      const existing = records.get(sourceId);
+
+      if (existing) {
+        return existing;
       }
 
-      return records.get(sourceId)!;
+      const record: NetworkRequestRecord = {
+        sourceId,
+        url: null,
+        initialUrl: null,
+        urlHistory: [],
+        redirects: [],
+        method: null,
+        requestType: null,
+        fetchDestination: null,
+        fetchMode: null,
+        referer: null,
+        initiator: null,
+        resourceType: 'unknown',
+        status: null,
+        mimeType: null,
+        contentEncoding: null,
+        contentLengthBytes: null,
+        preFilterBodyBytes: 0,
+        postFilterBodyBytes: 0,
+        rawReadEvents: 0,
+        filteredReadEvents: 0,
+        failed: false,
+        netError: null,
+        startTick: null,
+        endTick: null,
+        sizeBytes: null,
+        sizeSource: 'unknown',
+        durationMs: null,
+        redirectCount: 0,
+        offsetFromFirstRequestMs: null,
+      };
+
+      records.set(sourceId, record);
+      return record;
     };
 
     const appendUrl = (
@@ -435,19 +451,18 @@ export class NetworkParser {
         case 'URL_REQUEST_START_JOB': {
           eventCounts.URL_REQUEST_START_JOB++;
 
-          appendUrl(record, params.url);
+          appendUrl(record, params['url']);
 
-          record.method = stringOrNull(params.method) ?? record.method;
+          record.method = stringOrNull(params['method']) ?? record.method;
           record.requestType =
-            stringOrNull(params.request_type) ?? record.requestType;
-          record.initiator = params.initiator ?? record.initiator;
+            stringOrNull(params['request_type']) ?? record.requestType;
+          record.initiator = params['initiator'] ?? record.initiator;
 
-          if (
-            params.net_error != null &&
-            Number(params.net_error) !== 0
-          ) {
+          const netError = numberOrStringOrNull(params['net_error']);
+
+          if (netError !== null && Number(netError) !== 0) {
             record.failed = true;
-            record.netError = params.net_error as number | string;
+            record.netError = netError;
           }
 
           break;
@@ -456,9 +471,9 @@ export class NetworkParser {
         case 'URL_REQUEST_REDIRECTED': {
           eventCounts.URL_REQUEST_REDIRECTED++;
 
-          if (typeof params.location === 'string') {
-            record.redirects.push(params.location);
-            appendUrl(record, params.location);
+          if (typeof params['location'] === 'string') {
+            record.redirects.push(params['location']);
+            appendUrl(record, params['location']);
           }
 
           break;
@@ -467,7 +482,7 @@ export class NetworkParser {
         case 'URL_REQUEST_JOB_BYTES_READ': {
           eventCounts.URL_REQUEST_JOB_BYTES_READ++;
 
-          const bytes = numberOrNull(params.byte_count);
+          const bytes = numberOrNull(params['byte_count']);
 
           if (bytes !== null && bytes > 0) {
             record.preFilterBodyBytes += bytes;
@@ -480,7 +495,7 @@ export class NetworkParser {
         case 'URL_REQUEST_JOB_FILTERED_BYTES_READ': {
           eventCounts.URL_REQUEST_JOB_FILTERED_BYTES_READ++;
 
-          const bytes = numberOrNull(params.byte_count);
+          const bytes = numberOrNull(params['byte_count']);
 
           if (bytes !== null && bytes > 0) {
             record.postFilterBodyBytes += bytes;
@@ -494,7 +509,7 @@ export class NetworkParser {
         case 'HTTP_TRANSACTION_QUIC_SEND_REQUEST_HEADERS': {
           eventCounts.requestHeaderEvents++;
 
-          readHeaders(record, params.headers, 'request');
+          readHeaders(record, params['headers'], 'request');
 
           break;
         }
@@ -504,7 +519,7 @@ export class NetworkParser {
         case 'URL_REQUEST_FAKE_RESPONSE_HEADERS_CREATED': {
           eventCounts.responseHeaderEvents++;
 
-          readHeaders(record, params.headers, 'response');
+          readHeaders(record, params['headers'], 'response');
 
           break;
         }
@@ -513,9 +528,9 @@ export class NetworkParser {
         case 'CANCELLED': {
           record.failed = true;
 
-          if (params.net_error != null) {
-            record.netError = params.net_error as number | string;
-          }
+          record.netError = numberOrStringOrNull(
+            params['net_error'],
+          );
 
           break;
         }
@@ -523,24 +538,22 @@ export class NetworkParser {
         default: {
           if (
             eventName.includes('READ_RESPONSE_HEADERS') &&
-            params.headers
+            params['headers']
           ) {
-            readHeaders(record, params.headers, 'response');
+            readHeaders(record, params['headers'], 'response');
           }
 
-          if (
-            params.net_error != null &&
-            Number(params.net_error) !== 0
-          ) {
+          const netError = numberOrStringOrNull(params['net_error']);
+
+          if (netError !== null && Number(netError) !== 0) {
             record.failed = true;
-            record.netError = params.net_error as number | string;
+            record.netError = netError;
           }
         }
       }
     }
 
     const requests = [...records.values()].map((record) => {
-      // Pre-filter and post-filter bytes must never be added together.
       if (record.preFilterBodyBytes > 0) {
         record.sizeBytes = record.preFilterBodyBytes;
         record.sizeSource = 'netlog-prefilter-body';

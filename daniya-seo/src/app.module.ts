@@ -1,18 +1,25 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from './core/config/config.module';
-import { RepositoriesModule } from './infrastructure/database/repositories/repositories.module';
-import { SecurityModule } from './modules/security/security.module';
-import { WorkflowModule } from './modules/workflow/application/workflow.module';
-import { WorkflowApiModule } from './modules/api/api.module';
 
+import { ConfigModule } from './core/config/config.module';
+import { DatabaseModule } from './infrastructure/database/database.module';
+import { OutboxModule } from './infrastructure/outbox/outbox.module';
+
+import { AccessModule } from './modules/access/access.module';
+import { ApiModule } from './modules/api/api.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { SecurityModule } from './modules/security/security.module';
+import { WorkflowModule } from './modules/workflow/workflow.module';
 
 @Module({
   imports: [
     ConfigModule,
-    RepositoriesModule,
+    DatabaseModule,
     SecurityModule,
+    AccessModule,
     WorkflowModule,
-    WorkflowApiModule,
+    ApiModule,
+    ReportsModule,
+    OutboxModule,
   ],
 })
 export class AppModule {}

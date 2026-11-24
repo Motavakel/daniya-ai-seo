@@ -31,7 +31,7 @@ export const scanEngineTypeEnum = pgEnum('scan_engine_type', [
 
 export const scanEngineRunStatusEnum = pgEnum(
   'scan_engine_run_status',
-  ['queued', 'running', 'succeeded', 'failed'],
+  ['queued', 'running', 'completed', 'failed'],
 );
 
 export const outboxEventTypeEnum = pgEnum('outbox_event_type', [
@@ -41,4 +41,38 @@ export const outboxEventTypeEnum = pgEnum('outbox_event_type', [
 export const outboxEventStatusEnum = pgEnum(
   'outbox_event_status',
   ['pending', 'processing', 'published', 'failed'],
+);
+
+export const reportArtifactTypeEnum = pgEnum(
+  'report_artifact_type',
+  [
+    'lighthouse_json',
+    'lighthouse_html',
+    'network_netlog',
+    'network_report',
+    'performance_trace',
+    'console_report',
+    'scan_report',
+  ],
+);
+
+export const storageProviderEnum = pgEnum('storage_provider', [
+  'local',
+  's3',
+]);
+
+export const compressionTypeEnum = pgEnum('compression_type', [
+  'gzip',
+  'br',
+  'none',
+]);
+
+export const lighthouseFormFactorEnum = pgEnum(
+  'lighthouse_form_factor',
+  ['mobile', 'desktop'],
+);
+
+export const lighthouseThrottlingMethodEnum = pgEnum(
+  'lighthouse_throttling_method',
+  ['simulate', 'devtools', 'provided'],
 );

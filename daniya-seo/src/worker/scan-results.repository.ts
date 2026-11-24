@@ -1,11 +1,15 @@
 import { Injectable } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
+
 import { DrizzleService } from '../infrastructure/database/drizzle.service';
 import { WorkflowRepository } from '../modules/workflow/workflow.repository';
 import type { StoredArtifact } from '../infrastructure/storage/artifact-storage.service';
 import type { LighthouseParsedReport } from '../modules/engines/lighthouse/lighthouse.parser';
-import { lighthouseReports } from '../infrastructure/database/schema/workflow/lighthouse-reports.schema';
+
 import { networkRuns } from '../infrastructure/database/schema/workflow/network-runs.schema';
-import { reportArtifacts } from '../infrastructure/database/schema/engine/report-artifacts.schema';
+import { lighthouseRuns } from '../infrastructure/database/schema/workflow/lighthouse-runs.schema';
+import { reportArtifacts } from '../infrastructure/database/schema/workflow/report-artifacts.schema';
+
 import { AccessService } from '../modules/access/services/access.service';
 
 type ScanRecord = {
@@ -15,6 +19,16 @@ type ScanRecord = {
 };
 
 type ArtifactInput = StoredArtifact;
+
+function toJsonb(value: unknown) {
+  const serialized = JSON.stringify(value);
+
+  if (serialized === undefined) {
+    throw new Error('Unable to serialize JSON data.');
+  }
+
+  return sql`${serialized}::jsonb`;
+}
 
 @Injectable()
 export class ScanResultsRepository {
@@ -57,13 +71,14 @@ export class ScanResultsRepository {
 
     const auditValue = (id: string) => {
       const value = report.audits[id]?.numericValue;
+
       return value != null && Number.isFinite(value)
         ? Math.trunc(value)
         : null;
     };
 
     await this.drizzle.db.transaction(async (tx) => {
-      await tx.insert(lighthouseReports).values({
+      await tx.insert(lighthouseRuns).values({
         scanId: input.scan.id,
         engineRunId: input.engineRunId,
 
@@ -92,13 +107,13 @@ export class ScanResultsRepository {
           report.metrics.cumulativeLayoutShift?.value,
         ),
         timeToInteractiveMs: metric(
-          report.audits.interactive?.numericValue,
+          report.audits['interactive']?.numericValue,
         ),
 
         totalByteWeightBytes: auditValue('total-byte-weight'),
         networkRequests: auditValue('network-requests'),
 
-        auditSummaries,
+        auditSummaries: toJsonb(auditSummaries),
         categoryDetails: report.categories,
         runWarnings: report.warnings,
       });
@@ -148,12 +163,15 @@ export class ScanResultsRepository {
     report: Record<string, unknown>;
     artifacts: ArtifactInput[];
   }): Promise<void> {
-    const requests = Array.isArray(input.report.requests)
-      ? input.report.requests.length
+    const requestsValue = input.report['requests'];
+    const findingsValue = input.report['findings'];
+
+    const requests = Array.isArray(requestsValue)
+      ? requestsValue.length
       : null;
 
-    const findings = Array.isArray(input.report.findings)
-      ? input.report.findings.length
+    const findings = Array.isArray(findingsValue)
+      ? findingsValue.length
       : null;
 
     await this.drizzle.db.transaction(async (tx) => {
@@ -166,15 +184,17 @@ export class ScanResultsRepository {
         captureStartedAt: input.startedAt,
         captureFinishedAt: input.finishedAt,
         observationDurationMs: input.observationDurationMs,
-        summary: {
+
+        summary: toJsonb({
           requestCount: requests,
           findingCount: findings,
-        },
-        fieldAvailability: {
+        }),
+
+        fieldAvailability: toJsonb({
           netLog: 'available',
           requests: requests === null ? 'not_observed' : 'available',
           findings: findings === null ? 'not_observed' : 'available',
-        },
+        }),
       });
 
       await tx.insert(reportArtifacts).values(

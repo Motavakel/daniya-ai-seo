@@ -14,7 +14,7 @@ import {
 
 import { scanEngineRuns } from './scan-engine-runs.schema';
 import { scans } from './scans.schema';
-import type { FieldAvailability, JsonObject } from './schema.types';
+import type { FieldAvailability, JsonObject } from '../schema.types';
 
 export const networkRuns = pgTable(
   'network_runs',

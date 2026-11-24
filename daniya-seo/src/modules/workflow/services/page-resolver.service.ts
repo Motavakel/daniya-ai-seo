@@ -11,26 +11,7 @@ export class PageResolverService {
     private readonly workflowRepository: WorkflowRepository,
   ) {}
 
-  async resolve(
-    customerId: string,
-    targetUrl: string,
-    tx: DbTransaction,
-  ) {
-    const normalizedUrl = this.normalizeUrl(targetUrl);
-
-    const page = await this.workflowRepository.findOrCreatePage(
-      customerId,
-      normalizedUrl,
-      tx,
-    );
-
-    return {
-      page,
-      normalizedUrl,
-    };
-  }
-
-  private normalizeUrl(value: string): string {
+  normalizeUrl(value: string): string {
     let url: URL;
 
     try {
@@ -51,10 +32,8 @@ export class PageResolverService {
       );
     }
 
-    // Remove fragment.
     url.hash = '';
 
-    // Remove tracking query parameters.
     const trackingParams = new Set([
       'gclid',
       'dclid',
@@ -84,5 +63,36 @@ export class PageResolverService {
     }
 
     return url.toString();
+  }
+
+  async resolve(
+    customerId: string,
+    targetUrl: string,
+    tx: DbTransaction,
+  ) {
+    const normalizedUrl = this.normalizeUrl(targetUrl);
+
+    return this.resolveNormalized(
+      customerId,
+      normalizedUrl,
+      tx,
+    );
+  }
+
+  async resolveNormalized(
+    customerId: string,
+    normalizedUrl: string,
+    tx: DbTransaction,
+  ) {
+    const page = await this.workflowRepository.findOrCreatePage(
+      customerId,
+      normalizedUrl,
+      tx,
+    );
+
+    return {
+      page,
+      normalizedUrl,
+    };
   }
 }

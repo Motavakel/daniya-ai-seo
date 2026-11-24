@@ -119,9 +119,9 @@ Caddy مقدار SHA-256 fingerprint را به صورت hex بدون colon ار�
 
 ```
 
-daniya-ai-seo   
-├── daniya-gateway                            
-|   ├── src                                       
+daniya-ai-seo
+├── daniya-gateway
+|   ├── src
 |   |   ├── common
 |   |   |   ├── decorators
 |   |   |   |   └── common.decorator.ts
@@ -205,17 +205,17 @@ daniya-ai-seo
 |   |   |   |   |   |   ├── customers.schema.ts
 |   |   |   |   |   |   ├── page-cycle-slots.schema.ts
 |   |   |   |   |   |   └── pages.schema.ts
-|   |   |   |   |   ├── engine
-|   |   |   |   |   |   ├── lighthouse-reports.schema.ts
-|   |   |   |   |   |   ├── network-runs.schema.ts
-|   |   |   |   |   |   └── report-artifacts.schema.ts
 |   |   |   |   |   ├── workflow
 |   |   |   |   |   |   ├── idempotency-records.schema.ts
+|   |   |   |   |   |   ├── lighthouse-runs.schema.ts
+|   |   |   |   |   |   ├── network-runs.schema.ts
 |   |   |   |   |   |   ├── outbox-events.schema.ts
+|   |   |   |   |   |   ├── report-artifacts.schema.ts
 |   |   |   |   |   |   ├── scan-engine-runs.schema.ts
 |   |   |   |   |   |   └── scans.schema.ts
 |   |   |   |   |   ├── enums.schema.ts
-|   |   |   |   |   └── index.ts
+|   |   |   |   |   ├── index.ts
+|   |   |   |   |   └── schema.types.ts
 |   |   |   |   ├── database.constants.ts
 |   |   |   |   ├── database.module.ts
 |   |   |   |   └── drizzle.service.ts
@@ -325,5 +325,18 @@ daniya-ai-seo
 ├── compose.prod.yaml
 ├── compose.yaml
 └── README.md
-
 ```
+
+
+نمته مهم انکه وقای مقدار شاخص 
+LCP 
+ریاد باشد باید پرفورمسن  و بخش 
+LCP Breackdown
+
+وقتی شاخص 
+cls
+مقدار بالیی داره باید  بخش مربوط به این شاخص بررسی بشه
+
+وقتی شاخص 
+FCP
+بالا باشد ، باید فشرده کردن رندر بلاک ها بررسی شود

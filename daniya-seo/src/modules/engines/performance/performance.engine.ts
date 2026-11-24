@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import type { CDPSession, Page } from 'puppeteer-core';
 
-import {
-  PerformanceParser,
+import { PerformanceParser } from './performance.parser';
+import type {
   PerformanceReport,
   PerformanceSnapshot,
   PerformanceTraceEvent,
@@ -38,6 +38,75 @@ interface BrowserObserverStore {
   }>;
 }
 
+interface BrowserPerformanceEntryLike {
+  name: string;
+  startTime: number;
+  duration: number;
+  initiatorType?: string;
+  transferSize?: number;
+  encodedBodySize?: number;
+  decodedBodySize?: number;
+  value?: number;
+  hadRecentInput?: boolean;
+  size?: number;
+  id?: string;
+  url?: string;
+  interactionId?: number;
+  element?: {
+    tagName?: string;
+    id?: string;
+  };
+}
+
+interface BrowserNavigationEntryLike
+  extends BrowserPerformanceEntryLike {
+  type: string;
+  nextHopProtocol: string;
+  redirectCount: number;
+  fetchStart: number;
+  domainLookupStart: number;
+  domainLookupEnd: number;
+  connectStart: number;
+  connectEnd: number;
+  secureConnectionStart: number;
+  requestStart: number;
+  responseStart: number;
+  responseEnd: number;
+  domInteractive: number;
+  domContentLoadedEventEnd: number;
+  loadEventEnd: number;
+}
+
+interface BrowserPerformanceApi {
+  timeOrigin: number;
+  getEntriesByType(
+    type: string,
+  ): BrowserPerformanceEntryLike[];
+}
+
+interface BrowserObserverList {
+  getEntries(): BrowserPerformanceEntryLike[];
+}
+
+interface BrowserObserver {
+  observe(options: {
+    type: string;
+    buffered?: boolean;
+    durationThreshold?: number;
+  }): void;
+}
+
+interface BrowserObserverConstructor {
+  new (callback: (list: BrowserObserverList) => void): BrowserObserver;
+  supportedEntryTypes?: string[];
+}
+
+interface BrowserGlobal {
+  PerformanceObserver?: BrowserObserverConstructor;
+  performance: BrowserPerformanceApi;
+  __daniyaPerformance?: BrowserObserverStore;
+}
+
 interface TraceEventBatch {
   value: unknown[];
 }
@@ -51,6 +120,7 @@ export interface PerformanceCapture {
 }
 
 const MAX_TRACE_EVENTS = 20_000;
+const TRACING_TIMEOUT_MS = 30_000;
 
 const TRACE_EVENT_NAMES = new Set([
   'thread_name',
@@ -76,12 +146,22 @@ export class PerformanceEngine {
     const client = await page.createCDPSession();
 
     const events: PerformanceTraceEvent[] = [];
-    let droppedEvents = 0;
+    const counters = {
+      droppedEvents: 0,
+    };
+
+    let onDataCollected:
+      | ((event: TraceEventBatch) => void)
+      | undefined;
+
+    let tracingStarted = false;
 
     try {
       await client.send('Performance.enable');
 
       await page.evaluateOnNewDocument(() => {
+        const browser = globalThis as unknown as BrowserGlobal;
+
         const store: BrowserObserverStore = {
           longTasks: [],
           layoutShifts: [],
@@ -89,23 +169,26 @@ export class PerformanceEngine {
           eventTimings: [],
         };
 
-        Object.defineProperty(window, '__daniyaPerformance', {
+        Object.defineProperty(browser, '__daniyaPerformance', {
           value: store,
           writable: false,
           configurable: false,
         });
 
-        const supported = PerformanceObserver.supportedEntryTypes;
+        const Observer = browser.PerformanceObserver;
+        const supported = Observer?.supportedEntryTypes ?? [];
+
+        if (!Observer) return;
 
         const observe = (
           type: string,
-          callback: (entry: PerformanceEntry) => void,
+          callback: (entry: BrowserPerformanceEntryLike) => void,
           durationThreshold?: number,
         ) => {
           if (!supported.includes(type)) return;
 
           try {
-            const observer = new PerformanceObserver((list) => {
+            const observer = new Observer((list) => {
               for (const entry of list.getEntries()) {
                 callback(entry);
               }
@@ -117,9 +200,9 @@ export class PerformanceEngine {
               ...(durationThreshold !== undefined
                 ? { durationThreshold }
                 : {}),
-            } as unknown as PerformanceObserverInit);
+            });
           } catch {
-            // Unsupported observer types are ignored.
+            return;
           }
         };
 
@@ -132,83 +215,80 @@ export class PerformanceEngine {
         });
 
         observe('layout-shift', (entry) => {
-          const shift = entry as PerformanceEntry & {
-            value: number;
-            hadRecentInput: boolean;
-          };
-
           store.layoutShifts.push({
-            startTime: shift.startTime,
-            value: shift.value,
-            hadRecentInput: shift.hadRecentInput,
+            startTime: entry.startTime,
+            value: entry.value ?? 0,
+            hadRecentInput: entry.hadRecentInput ?? false,
           });
         });
 
         observe('largest-contentful-paint', (entry) => {
-          const lcp = entry as PerformanceEntry & {
-            size: number;
-            id: string;
-            url: string;
-            element?: Element;
-          };
-
           store.largestContentfulPaint.push({
-            startTime: lcp.startTime,
-            size: lcp.size,
-            id: lcp.id ?? '',
-            url: lcp.url ?? '',
-            elementTagName: lcp.element?.tagName ?? null,
-            elementId: lcp.element?.id ?? null,
+            startTime: entry.startTime,
+            size: entry.size ?? 0,
+            id: entry.id ?? '',
+            url: entry.url ?? '',
+            elementTagName: entry.element?.tagName ?? null,
+            elementId: entry.element?.id ?? null,
           });
         });
 
         observe(
           'event',
           (entry) => {
-            const event = entry as PerformanceEntry & {
-              interactionId?: number;
-            };
-
             store.eventTimings.push({
-              startTime: event.startTime,
-              duration: event.duration,
-              name: event.name,
-              interactionId: event.interactionId ?? 0,
+              startTime: entry.startTime,
+              duration: entry.duration,
+              name: entry.name,
+              interactionId: entry.interactionId ?? 0,
             });
           },
           16,
         );
       });
 
-      const onDataCollected = (event: TraceEventBatch) => {
+      onDataCollected = (event: TraceEventBatch) => {
         for (const item of event.value) {
           if (!item || typeof item !== 'object') continue;
 
           const raw = item as Record<string, unknown>;
-          const name = String(raw.name ?? '');
+          const name =
+            typeof raw['name'] === 'string'
+              ? raw['name']
+              : '';
 
           if (!TRACE_EVENT_NAMES.has(name)) continue;
 
           if (events.length >= MAX_TRACE_EVENTS) {
-            droppedEvents++;
+            counters.droppedEvents++;
             continue;
           }
 
           events.push({
             name,
             category:
-              typeof raw.cat === 'string' ? raw.cat : undefined,
+              typeof raw['cat'] === 'string'
+                ? raw['cat']
+                : undefined,
             phase:
-              typeof raw.ph === 'string' ? raw.ph : undefined,
+              typeof raw['ph'] === 'string'
+                ? raw['ph']
+                : undefined,
             timestamp:
-              typeof raw.ts === 'number' ? raw.ts : undefined,
+              typeof raw['ts'] === 'number'
+                ? raw['ts']
+                : undefined,
             duration:
-              typeof raw.dur === 'number' ? raw.dur : undefined,
+              typeof raw['dur'] === 'number'
+                ? raw['dur']
+                : undefined,
             threadId:
-              typeof raw.tid === 'number' ? raw.tid : undefined,
+              typeof raw['tid'] === 'number'
+                ? raw['tid']
+                : undefined,
             args:
-              raw.args && typeof raw.args === 'object'
-                ? (raw.args as Record<string, unknown>)
+              raw['args'] && typeof raw['args'] === 'object'
+                ? (raw['args'] as Record<string, unknown>)
                 : undefined,
           });
         }
@@ -227,23 +307,37 @@ export class PerformanceEngine {
         transferMode: 'ReportEvents',
       });
 
+      tracingStarted = true;
+
       return {
         page,
         client,
         events,
-        droppedEvents,
+        get droppedEvents() {
+          return counters.droppedEvents;
+        },
         onDataCollected,
       };
     } catch (error: unknown) {
-      client.off('Tracing.dataCollected', () => undefined);
+      if (tracingStarted) {
+        await this.stopTracing(client).catch(() => undefined);
+      }
 
-      await client.detach().catch(() => undefined);
+      if (onDataCollected) {
+        client.off('Tracing.dataCollected', onDataCollected);
+      }
+
+      if (!client.detached) {
+        await client.detach().catch(() => undefined);
+      }
 
       throw error;
     }
   }
 
-  async stop(capture: PerformanceCapture): Promise<PerformanceReport> {
+  async stop(
+    capture: PerformanceCapture,
+  ): Promise<PerformanceReport> {
     try {
       await this.stopTracing(capture.client);
 
@@ -251,9 +345,12 @@ export class PerformanceEngine {
         capture.client.send('Performance.getMetrics'),
 
         capture.page.evaluate(() => {
+          const browser = globalThis as unknown as BrowserGlobal;
+          const performance = browser.performance;
+
           const navigationEntry = performance.getEntriesByType(
             'navigation',
-          )[0] as PerformanceNavigationTiming | undefined;
+          )[0] as BrowserNavigationEntryLike | undefined;
 
           const paintEntries = performance
             .getEntriesByType('paint')
@@ -264,26 +361,16 @@ export class PerformanceEngine {
 
           const resourceEntries = performance
             .getEntriesByType('resource')
-            .map((entry) => {
-              const resource = entry as PerformanceResourceTiming;
+            .map((resource) => ({
+              name: resource.name,
+              initiatorType: resource.initiatorType ?? '',
+              duration: resource.duration,
+              transferSize: resource.transferSize ?? 0,
+              encodedBodySize: resource.encodedBodySize ?? 0,
+              decodedBodySize: resource.decodedBodySize ?? 0,
+            }));
 
-              return {
-                name: resource.name,
-                initiatorType: resource.initiatorType,
-                duration: resource.duration,
-                transferSize: resource.transferSize,
-                encodedBodySize: resource.encodedBodySize,
-                decodedBodySize: resource.decodedBodySize,
-              };
-            });
-
-          const observerStore = (
-            window as Window & {
-              __daniyaPerformance?: BrowserObserverStore;
-            }
-          ).__daniyaPerformance;
-
-          const observers = observerStore ?? {
+          const observers = browser.__daniyaPerformance ?? {
             longTasks: [],
             layoutShifts: [],
             largestContentfulPaint: [],
@@ -295,9 +382,11 @@ export class PerformanceEngine {
               transferSizeBytes:
                 result.transferSizeBytes + resource.transferSize,
               encodedBodySizeBytes:
-                result.encodedBodySizeBytes + resource.encodedBodySize,
+                result.encodedBodySizeBytes +
+                resource.encodedBodySize,
               decodedBodySizeBytes:
-                result.decodedBodySizeBytes + resource.decodedBodySize,
+                result.decodedBodySizeBytes +
+                resource.decodedBodySize,
             }),
             {
               transferSizeBytes: 0,
@@ -326,7 +415,8 @@ export class PerformanceEngine {
                   redirectCount: navigationEntry.redirectCount,
                   duration: navigationEntry.duration,
                   fetchStart: navigationEntry.fetchStart,
-                  domainLookupStart: navigationEntry.domainLookupStart,
+                  domainLookupStart:
+                    navigationEntry.domainLookupStart,
                   domainLookupEnd: navigationEntry.domainLookupEnd,
                   connectStart: navigationEntry.connectStart,
                   connectEnd: navigationEntry.connectEnd,
@@ -339,9 +429,12 @@ export class PerformanceEngine {
                   domContentLoadedEventEnd:
                     navigationEntry.domContentLoadedEventEnd,
                   loadEventEnd: navigationEntry.loadEventEnd,
-                  transferSize: navigationEntry.transferSize,
-                  encodedBodySize: navigationEntry.encodedBodySize,
-                  decodedBodySize: navigationEntry.decodedBodySize,
+                  transferSize:
+                    navigationEntry.transferSize ?? 0,
+                  encodedBodySize:
+                    navigationEntry.encodedBodySize ?? 0,
+                  decodedBodySize:
+                    navigationEntry.decodedBodySize ?? 0,
                 }
               : null,
 
@@ -389,7 +482,7 @@ export class PerformanceEngine {
       const timeout = setTimeout(() => {
         client.off('Tracing.tracingComplete', onComplete);
         reject(new Error('Chrome tracing timed out.'));
-      }, 30_000);
+      }, TRACING_TIMEOUT_MS);
 
       const onComplete = () => {
         clearTimeout(timeout);

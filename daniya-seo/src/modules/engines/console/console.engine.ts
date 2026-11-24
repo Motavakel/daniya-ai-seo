@@ -3,15 +3,15 @@ import type { ConsoleMessage, Page } from 'puppeteer-core';
 
 import {
   ConsoleParser,
-  ConsoleRecord,
-  ConsoleReport,
+  type ConsoleRecord,
+  type ConsoleReport,
 } from './console.parser';
 
 export interface ConsoleCapture {
   page: Page;
   records: ConsoleRecord[];
   onConsole: (message: ConsoleMessage) => void;
-  onPageError: (error: Error) => void;
+  onPageError: (error: unknown) => void;
 }
 
 @Injectable()
@@ -36,16 +36,16 @@ export class ConsoleEngine {
       });
     };
 
-    const onPageError = (error: Error) => {
+    const onPageError = (error: unknown) => {
       records.push({
         source: 'pageerror',
         type: 'error',
-        text: error.message,
+        text: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString(),
         url: null,
         lineNumber: null,
         columnNumber: null,
-        stack: error.stack ?? null,
+        stack: error instanceof Error ? error.stack ?? null : null,
       });
     };
 

@@ -3,26 +3,28 @@ import type { BullRootModuleOptions } from '@nestjs/bullmq';
 
 export const getBullMqConfig = (
   config: ConfigService,
-): BullRootModuleOptions => ({
-  prefix: config.get<string>('QUEUE_PREFIX', 'daniya-ai-seo'),
+): BullRootModuleOptions => {
+  const redisTls = config.get<boolean>('REDIS_TLS', false);
 
-  connection: {
-    host: config.getOrThrow<string>('REDIS_HOST'),
-    port: config.get<number>('REDIS_PORT', 6379),
-    username: config.get<string>('REDIS_USERNAME') || undefined,
-    password: config.get<string>('REDIS_PASSWORD') || undefined,
-    db: config.get<number>('REDIS_DB', 0),
+  return {
+    prefix: config.get<string>('QUEUE_PREFIX', 'daniya-ai-seo'),
 
-    ...(config.get<boolean>('REDIS_TLS', false)
-      ? { tls: {} }
-      : {}),
+    connection: {
+      host: config.getOrThrow<string>('REDIS_HOST'),
+      port: config.get<number>('REDIS_PORT', 6379),
+      username: config.get<string>('REDIS_USERNAME') || undefined,
+      password: config.get<string>('REDIS_PASSWORD') || undefined,
+      db: config.get<number>('REDIS_DB', 0),
 
-    maxRetriesPerRequest: null,
-    enableReadyCheck: true,
-  },
+      ...(redisTls ? { tls: {} } : {}),
 
-  defaultJobOptions: {
-    removeOnComplete: { age: 3600 },
-    removeOnFail: { age: 86400 },
-  },
-});
+      maxRetriesPerRequest: null,
+      enableReadyCheck: true,
+    },
+
+    defaultJobOptions: {
+      removeOnComplete: { age: 3600 },
+      removeOnFail: { age: 86400 },
+    },
+  };
+};

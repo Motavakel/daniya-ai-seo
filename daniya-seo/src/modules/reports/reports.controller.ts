@@ -6,16 +6,12 @@ import {
   ParseUUIDPipe,
   UseGuards,
 } from '@nestjs/common';
-
 import { CurrentPrincipal } from '../api/decorators/current-principal.decorator';
 import { RequireGatewayScopes } from '../api/decorators/require-gateway-scopes.decorator';
-
-import { GatewayAuthGuard } from '../api/guards/gateway-auth.guard';
-import { GatewayScopeGuard } from '../api/guards/gateway-scope.guard';
-
 import type { AuthenticatedPrincipal } from '../api/gateway-context';
-
 import { ReportsService } from './reports.service';
+import { GatewayAuthGuard } from '../api/gurds/gateway-auth.guard';
+import { GatewayScopeGuard } from '../api/gurds/gateway-scope.guard';
 
 @Controller('api/v1/reports')
 @UseGuards(GatewayAuthGuard, GatewayScopeGuard)

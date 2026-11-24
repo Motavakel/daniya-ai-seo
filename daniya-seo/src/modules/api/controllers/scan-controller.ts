@@ -11,19 +11,25 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
+
 import { CurrentPrincipal } from '../decorators/current-principal.decorator';
+import { IdempotencyKey } from '../decorators/idempotency-key.decorator';
 import { RequireGatewayScopes } from '../decorators/require-gateway-scopes.decorator';
+
 import { CreateScanDto } from '../dto/create-scan.dto';
 import type { AuthenticatedPrincipal } from '../gateway-context';
-import { WorkflowService } from '../../workflow/workflow.service';
-import { GatewayScopeGuard } from '../gurds/gateway-scope.guard';
+
+
+import { WorkflowService } from '../../workflow/services/workflow.service';
 import { GatewayAuthGuard } from '../gurds/gateway-auth.guard';
-import { IdempotencyKey } from '../decorators/idempotency-key.decorator';
+import { GatewayScopeGuard } from '../gurds/gateway-scope.guard';
 
 @Controller('api/v1/scans')
 @UseGuards(GatewayAuthGuard, GatewayScopeGuard)
 export class ScanController {
-  constructor(private readonly workflow: WorkflowService) {}
+  constructor(
+    private readonly workflowService: WorkflowService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
@@ -32,20 +38,23 @@ export class ScanController {
     @CurrentPrincipal() principal: AuthenticatedPrincipal,
     @Body() dto: CreateScanDto,
     @IdempotencyKey() idempotencyKey: string,
-    @Res({ passthrough: true }) res: Response,
+    @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.workflow.createScan({
+    const result = await this.workflowService.createScan({
       customerId: principal.customerId,
-      pageUrl: dto.page_url,
+      gatewayTokenId: principal.tokenId,
+      targetUrl: dto.page_url,
       idempotencyKey,
-      tokenId: principal.tokenId,
     });
 
-    res.header('Location', `/api/v1/scans/${result.scanId}`);
+    const statusUrl = `/api/v1/scans/${result.scanId}`;
+
+    response.setHeader('Location', statusUrl);
 
     return {
       scanId: result.scanId,
       status: result.status,
+      statusUrl,
       alreadyExisted: result.alreadyExisted,
       createdAt: result.createdAt.toISOString(),
     };
@@ -57,7 +66,7 @@ export class ScanController {
     @CurrentPrincipal() principal: AuthenticatedPrincipal,
     @Param('scanId', new ParseUUIDPipe()) scanId: string,
   ) {
-    return this.workflow.getScanStatus({
+    return this.workflowService.getScanStatus({
       scanId,
       customerId: principal.customerId,
     });

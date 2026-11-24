@@ -11,3 +11,6 @@ export * from './workflow/scan-engine-runs.schema';
 
 export * from './workflow/idempotency-records.schema';
 export * from './workflow/outbox-events.schema';
+
+export * from './workflow/lighthouse-runs.schema';
+export * from './workflow/network-runs.schema';

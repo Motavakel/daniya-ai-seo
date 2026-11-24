@@ -11,7 +11,6 @@ import {
   text,
 } from 'drizzle-orm/pg-core';
 
-
 import { scans } from './scans.schema';
 import { outboxEventTypeEnum, outboxEventStatusEnum } from '../enums.schema';
 

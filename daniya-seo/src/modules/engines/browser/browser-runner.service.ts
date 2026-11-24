@@ -15,6 +15,15 @@ export interface BrowserSession {
 const NAVIGATION_TIMEOUT_MS = 90_000;
 const BYTES_PER_MB = 1024 * 1024;
 
+const MOBILE_VIEWPORT = {
+  width: 390,
+  height: 844,
+  deviceScaleFactor: 3,
+  isMobile: true,
+  hasTouch: true,
+  isLandscape: false,
+};
+
 @Injectable()
 export class BrowserRunnerService {
   constructor(private readonly config: ConfigService) {}
@@ -82,12 +91,24 @@ export class BrowserRunnerService {
       const pages = await browser.pages();
       const page = pages[0] ?? await browser.newPage();
 
-      page.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT_MS);
+      const chromeVersion = await browser.version();
+      const versionMatch = chromeVersion.match(/Chrome\/([\d.]+)/);
 
-      await page.setViewport({
-        width: 1365,
-        height: 900,
+      if (!versionMatch) {
+        throw new Error('Unable to determine Chrome version.');
+      }
+
+      const mobileUserAgent =
+        `Mozilla/5.0 (Linux; Android 10; K) ` +
+        `AppleWebKit/537.36 (KHTML, like Gecko) ` +
+        `Chrome/${versionMatch[1]} Mobile Safari/537.36`;
+
+      await page.emulate({
+        userAgent: mobileUserAgent,
+        viewport: MOBILE_VIEWPORT,
       });
+
+      page.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT_MS);
 
       return {
         browser,
@@ -96,7 +117,7 @@ export class BrowserRunnerService {
         tempDir,
       };
     } catch (error: unknown) {
-      if (browser?.isConnected()) {
+      if (browser?.connected) {
         await browser.close().catch(() => undefined);
       }
 
@@ -113,14 +134,22 @@ export class BrowserRunnerService {
     session: BrowserSession,
     targetUrl: string,
   ): Promise<string | null> {
-    const url = new URL(targetUrl);
+    let url: URL;
 
-    if (!['http:', 'https:'].includes(url.protocol)) {
-      throw new Error('Only HTTP and HTTPS URLs are supported.');
+    try {
+      url = new URL(targetUrl);
+    } catch {
+      throw new Error('Invalid target URL.');
+    }
+
+    if (url.protocol !== 'https:') {
+      throw new Error('Only HTTPS URLs are supported.');
     }
 
     if (url.username || url.password) {
-      throw new Error('URLs with embedded credentials are not allowed.');
+      throw new Error(
+        'URLs with embedded credentials are not allowed.',
+      );
     }
 
     try {
@@ -138,7 +167,7 @@ export class BrowserRunnerService {
   }
 
   async close(session: BrowserSession): Promise<void> {
-    if (session.browser.isConnected()) {
+    if (session.browser.connected) {
       await session.browser.close();
     }
   }

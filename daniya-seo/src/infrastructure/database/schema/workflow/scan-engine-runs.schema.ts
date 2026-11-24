@@ -96,7 +96,7 @@ export const scanEngineRuns = pgTable(
         )
         OR
         (
-          ${table.status} IN ('succeeded', 'failed')
+          ${table.status} IN ('completed', 'failed')
           AND ${table.startedAt} IS NOT NULL
           AND ${table.completedAt} IS NOT NULL
           AND ${table.lockToken} IS NULL

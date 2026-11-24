@@ -1,14 +1,25 @@
 import 'reflect-metadata';
-import { Logger } from '@nestjs/common';
+import {
+  Logger,
+  ValidationPipe,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+  const config = app.get(ConfigService);
+  const logger = new Logger('ApiBootstrap');
+  const processType = config.getOrThrow<string>('APP_PROCESS');
+  if (processType !== 'api') {
+    throw new Error('APP_PROCESS must be api.');
+  }
+  const port = config.get<number>('PORT', 3000);
 
-  app.useLogger(new Logger());
+  app.useLogger(logger);
   app.enableShutdownHooks();
+
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
@@ -22,17 +33,19 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  const port = Number(process.env['PORT'] ?? 3000);
   await app.listen(port, '0.0.0.0');
-  Logger.log(`Daniya API listening on port ${port}`, 'Bootstrap');
+
+  logger.log(`Daniya SEO API listening on port ${port}`);
 }
 
 bootstrap().catch((error: unknown) => {
   const logger = new Logger('ApiBootstrap');
+
   logger.error(
     error instanceof Error
-      ? (error.stack ?? error.message)
-      : 'API bootstrap failed.',
+      ? error.stack ?? error.message
+      : String(error),
   );
+
   process.exitCode = 1;
 });

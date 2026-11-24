@@ -12,7 +12,12 @@ import {
 } from 'drizzle-orm/pg-core';
 import { scanEngineRuns } from '../workflow/scan-engine-runs.schema';
 import { scans } from '../workflow/scans.schema';
-
+import {
+  reportArtifactTypeEnum,
+  storageProviderEnum,
+  compressionTypeEnum,
+} from '../enums.schema';
+import { JsonObject } from '../schema.types';
 
 
 export const reportArtifacts = pgTable(
@@ -24,22 +29,10 @@ export const reportArtifacts = pgTable(
       .notNull()
       .references(() => scans.id, { onDelete: 'cascade' }),
 
-    engineRunId: uuid('engine_run_id').references(
-      () => scanEngineRuns.id,
-      { onDelete: 'cascade' },
-    ),
+    engineRunId: uuid('engine_run_id').references(() => scanEngineRuns.id, {
+      onDelete: 'cascade',
+    }),
 
-    artifactType: varchar('artifact_type', {
-      length: 40,
-    }).notNull(),
-
-    storageProvider: varchar('storage_provider', {
-      length: 32,
-    })
-      .notNull()
-      .default('local'),
-
-    // Relative storage key, not an absolute filesystem path.
     storageKey: varchar('storage_key', {
       length: 1024,
     }).notNull(),
@@ -48,9 +41,13 @@ export const reportArtifacts = pgTable(
       length: 127,
     }).notNull(),
 
-    compression: varchar('compression', {
-      length: 16,
-    }),
+    artifactType: reportArtifactTypeEnum('artifact_type').notNull(),
+
+    storageProvider: storageProviderEnum('storage_provider')
+      .notNull()
+      .default('local'),
+
+    compression: compressionTypeEnum('compression'),
 
     sizeBytes: bigint('size_bytes', {
       mode: 'number',
@@ -76,40 +73,16 @@ export const reportArtifacts = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex('report_artifacts_storage_key_uq').on(
-      table.storageKey,
-    ),
+    uniqueIndex('report_artifacts_storage_key_uq').on(table.storageKey),
 
     index('report_artifacts_scan_created_at_idx').on(
       table.scanId,
       table.createdAt,
     ),
 
-    index('report_artifacts_engine_run_idx').on(
-      table.engineRunId,
-    ),
+    index('report_artifacts_engine_run_idx').on(table.engineRunId),
 
-    index('report_artifacts_expires_at_idx').on(
-      table.expiresAt,
-    ),
-
-    check(
-      'report_artifacts_type_chk',
-      sql`${table.artifactType} IN (
-        'lighthouse_json',
-        'lighthouse_html',
-        'network_netlog',
-        'network_report',
-        'performance_trace',
-        'console_report',
-        'scan_report'
-      )`,
-    ),
-
-    check(
-      'report_artifacts_compression_chk',
-      sql`${table.compression} IS NULL OR ${table.compression} IN ('gzip', 'br', 'none')`,
-    ),
+    index('report_artifacts_expires_at_idx').on(table.expiresAt),
 
     check(
       'report_artifacts_size_non_negative_chk',

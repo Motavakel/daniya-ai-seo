@@ -1,12 +1,12 @@
-import {
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFile } from 'node:fs/promises';
 
 import { DrizzleService } from '../infrastructure/database/drizzle.service';
-import { WorkflowRepository, ScanEngineType } from '../modules/workflow/workflow.repository';
+import {
+  WorkflowRepository,
+  ScanEngineType,
+} from '../modules/workflow/workflow.repository';
 
 import { LighthouseEngine } from '../modules/engines/lighthouse/lighthouse.engine';
 import { LighthouseParser } from '../modules/engines/lighthouse/lighthouse.parser';
@@ -24,6 +24,10 @@ import {
 import { ScanResultsRepository } from './scan-results.repository';
 import { AccessService } from '../modules/access/services/access.service';
 
+interface LeaseHeartbeat {
+  hasLost: () => boolean;
+  stop: () => Promise<void>;
+}
 type ScanRecord = NonNullable<
   Awaited<ReturnType<WorkflowRepository['findScanById']>>
 >;
@@ -38,9 +42,7 @@ type EngineClaimResult =
   | { status: 'exhausted' };
 
 type ConsoleCapture = ReturnType<ConsoleEngine['start']>;
-type PerformanceCapture = Awaited<
-  ReturnType<PerformanceEngine['start']>
->;
+type PerformanceCapture = Awaited<ReturnType<PerformanceEngine['start']>>;
 
 const PRO_ENGINES: ScanEngineType[] = [
   'network',
@@ -53,9 +55,7 @@ const LEASE_HEARTBEAT_MS = 30_000;
 
 @Injectable()
 export class ScanOrchestratorService {
-  private readonly logger = new Logger(
-    ScanOrchestratorService.name,
-  );
+  private readonly logger = new Logger(ScanOrchestratorService.name);
 
   private readonly maxAttempts: number;
   private readonly observationMs: number;
@@ -77,10 +77,7 @@ export class ScanOrchestratorService {
     private readonly artifactStorage: ArtifactStorageService,
     private readonly scanResultsRepository: ScanResultsRepository,
   ) {
-    this.maxAttempts = this.config.get<number>(
-      'ENGINE_MAX_ATTEMPTS',
-      3,
-    );
+    this.maxAttempts = this.config.get<number>('ENGINE_MAX_ATTEMPTS', 3);
 
     this.observationMs = this.config.get<number>(
       'NETWORK_OBSERVATION_MS',
@@ -90,29 +87,24 @@ export class ScanOrchestratorService {
 
   async process(scanId: string): Promise<void> {
     const scan = await this.drizzle.db.transaction(async (tx) => {
-      const current =
-        await this.workflowRepository.findScanByIdForUpdate(
-          scanId,
-          tx,
-        );
+      const current = await this.workflowRepository.findScanByIdForUpdate(
+        scanId,
+        tx,
+      );
 
       if (!current) {
         throw new Error(`Scan not found: ${scanId}`);
       }
 
-      if (
-        current.status === 'completed' ||
-        current.status === 'failed'
-      ) {
+      if (current.status === 'completed' || current.status === 'failed') {
         return null;
       }
 
       if (current.status === 'queued') {
-        const started =
-          await this.workflowRepository.markScanRunning(
-            scanId,
-            tx,
-          );
+        const started = await this.workflowRepository.markScanRunning(
+          scanId,
+          tx,
+        );
 
         if (!started) {
           throw new Error('Unable to start scan.');
@@ -128,8 +120,7 @@ export class ScanOrchestratorService {
 
     this.logger.log(`Processing scan ${scanId}`);
 
-    const lighthouseSucceeded =
-      await this.processLighthouse(scan);
+    const lighthouseSucceeded = await this.processLighthouse(scan);
 
     if (!lighthouseSucceeded) {
       await this.failScan(scan);
@@ -145,18 +136,9 @@ export class ScanOrchestratorService {
     this.logger.log(`Scan ${scanId} completed.`);
   }
 
-  // --------------------------------------------------
-  // Lighthouse
-  // --------------------------------------------------
-
-  private async processLighthouse(
-    scan: ScanRecord,
-  ): Promise<boolean> {
+  private async processLighthouse(scan: ScanRecord): Promise<boolean> {
     while (true) {
-      const claim = await this.claimEngineRun(
-        scan.id,
-        'lighthouse',
-      );
+      const claim = await this.claimEngineRun(scan.id, 'lighthouse');
 
       if (claim.status === 'succeeded') {
         return true;
@@ -172,14 +154,10 @@ export class ScanOrchestratorService {
       let artifactKey: string | undefined;
 
       try {
-        const rawResult = await this.lighthouseEngine.run(
-          scan.targetUrl,
-        );
+        const rawResult = await this.lighthouseEngine.run(scan.targetUrl);
 
         const report = this.lighthouseParser.parse(
-          rawResult as Parameters<
-            LighthouseParser['parse']
-          >[0],
+          rawResult as Parameters<LighthouseParser['parse']>[0],
         );
 
         if (heartbeat.hasLost()) {
@@ -191,10 +169,7 @@ export class ScanOrchestratorService {
           engineRunId: run.id,
           artifactType: 'lighthouse_json',
           data: rawResult,
-          ttlDays: this.config.get<number>(
-            'LIGHTHOUSE_REPORT_TTL_DAYS',
-            30,
-          ),
+          ttlDays: this.config.get<number>('LIGHTHOUSE_REPORT_TTL_DAYS', 30),
         });
 
         artifactKey = artifact.storageKey;
@@ -214,9 +189,7 @@ export class ScanOrchestratorService {
         await heartbeat.stop();
 
         if (artifactKey) {
-          await this.artifactStorage
-            .remove(artifactKey)
-            .catch(() => undefined);
+          await this.artifactStorage.remove(artifactKey).catch(() => undefined);
         }
 
         await this.markEngineFailed(run);
@@ -234,18 +207,9 @@ export class ScanOrchestratorService {
     }
   }
 
-  // --------------------------------------------------
-  // Pro engines
-  // --------------------------------------------------
-
-  private async processProEngines(
-    scan: ScanRecord,
-  ): Promise<void> {
+  private async processProEngines(scan: ScanRecord): Promise<void> {
     while (true) {
-      const claims = await this.claimEngineRuns(
-        scan.id,
-        PRO_ENGINES,
-      );
+      const claims = await this.claimEngineRuns(scan.id, PRO_ENGINES);
 
       if (claims.length === 0) {
         return;
@@ -269,10 +233,7 @@ export class ScanOrchestratorService {
     const failures = new Map<ScanEngineType, Error>();
 
     for (const run of runs) {
-      heartbeats.set(
-        run.engineType,
-        this.startLeaseHeartbeat(run),
-      );
+      heartbeats.set(run.engineType, this.startLeaseHeartbeat(run));
     }
 
     let session:
@@ -291,9 +252,7 @@ export class ScanOrchestratorService {
     try {
       session = await this.browserRunner.launch();
 
-      const hasConsole = runs.some(
-        (run) => run.engineType === 'console',
-      );
+      const hasConsole = runs.some((run) => run.engineType === 'console');
 
       const hasPerformance = runs.some(
         (run) => run.engineType === 'chrome_performance',
@@ -302,9 +261,7 @@ export class ScanOrchestratorService {
       // Start captures before navigation.
       if (hasConsole) {
         try {
-          consoleCapture = this.consoleEngine.start(
-            session.page,
-          );
+          consoleCapture = this.consoleEngine.start(session.page);
         } catch (error: unknown) {
           failures.set('console', this.toError(error));
         }
@@ -312,45 +269,30 @@ export class ScanOrchestratorService {
 
       if (hasPerformance) {
         try {
-          performanceCapture =
-            await this.performanceEngine.start(
-              session.page,
-            );
+          performanceCapture = await this.performanceEngine.start(session.page);
         } catch (error: unknown) {
-          failures.set(
-            'chrome_performance',
-            this.toError(error),
-          );
+          failures.set('chrome_performance', this.toError(error));
         }
       }
 
-      navigationWarning =
-        await this.browserRunner.navigate(
-          session,
-          scan.targetUrl,
-        );
+      navigationWarning = await this.browserRunner.navigate(
+        session,
+        scan.targetUrl,
+      );
 
       await this.delay(this.observationMs);
 
-      // Stop Console independently.
       if (consoleCapture) {
         try {
-          const report = this.consoleEngine.stop(
-            consoleCapture,
-          );
+          const report = this.consoleEngine.stop(consoleCapture);
 
           await this.saveJsonEngineResult({
             scan,
             engineRunId: this.getRun(runs, 'console').id,
-            lockToken: this.requireLockToken(
-              this.getRun(runs, 'console'),
-            ),
+            lockToken: this.requireLockToken(this.getRun(runs, 'console')),
             artifactType: 'console_report',
             report,
-            ttlDays: this.config.get<number>(
-              'SCAN_RETENTION_DAYS',
-              30,
-            ),
+            ttlDays: this.config.get<number>('SCAN_RETENTION_DAYS', 30),
             heartbeat: heartbeats.get('console'),
           });
 
@@ -360,39 +302,25 @@ export class ScanOrchestratorService {
         }
       }
 
-      // Stop Performance independently.
       if (performanceCapture) {
         try {
-          const report = await this.performanceEngine.stop(
-            performanceCapture,
-          );
+          const report = await this.performanceEngine.stop(performanceCapture);
 
           await this.saveJsonEngineResult({
             scan,
-            engineRunId: this.getRun(
-              runs,
-              'chrome_performance',
-            ).id,
+            engineRunId: this.getRun(runs, 'chrome_performance').id,
             lockToken: this.requireLockToken(
               this.getRun(runs, 'chrome_performance'),
             ),
             artifactType: 'performance_trace',
             report,
-            ttlDays: this.config.get<number>(
-              'SCAN_RETENTION_DAYS',
-              30,
-            ),
-            heartbeat: heartbeats.get(
-              'chrome_performance',
-            ),
+            ttlDays: this.config.get<number>('SCAN_RETENTION_DAYS', 30),
+            heartbeat: heartbeats.get('chrome_performance'),
           });
 
           completed.add('chrome_performance');
         } catch (error: unknown) {
-          failures.set(
-            'chrome_performance',
-            this.toError(error),
-          );
+          failures.set('chrome_performance', this.toError(error));
         }
       }
 
@@ -405,15 +333,11 @@ export class ScanOrchestratorService {
         try {
           const finishedAt = new Date();
 
-          const rawNetLog = await readFile(
-            session.netLogPath,
-          );
+          const rawNetLog = await readFile(session.netLogPath);
 
           const options = {
             targetUrl: scan.targetUrl,
-            observationSeconds: Math.ceil(
-              this.observationMs / 1000,
-            ),
+            observationSeconds: Math.ceil(this.observationMs / 1000),
             navigationWarning,
             maxDiagnosticRequests: this.config.get<number>(
               'NETWORK_DIAGNOSTIC_MAX_REQUESTS',
@@ -433,33 +357,27 @@ export class ScanOrchestratorService {
             7,
           );
 
-          const netLogArtifact =
-            await this.artifactStorage.storeBuffer({
-              scanId: scan.id,
-              engineRunId: networkRun.id,
-              artifactType: 'network_netlog',
-              content: rawNetLog,
-              mimeType: 'application/json',
-              ttlDays,
-            });
+          const netLogArtifact = await this.artifactStorage.storeBuffer({
+            scanId: scan.id,
+            engineRunId: networkRun.id,
+            artifactType: 'network_netlog',
+            content: rawNetLog,
+            mimeType: 'application/json',
+            ttlDays,
+          });
 
           let reportArtifact:
-            | Awaited<
-                ReturnType<
-                  ArtifactStorageService['storeJson']
-                >
-              >
+            | Awaited<ReturnType<ArtifactStorageService['storeJson']>>
             | undefined;
 
           try {
-            reportArtifact =
-              await this.artifactStorage.storeJson({
-                scanId: scan.id,
-                engineRunId: networkRun.id,
-                artifactType: 'network_report',
-                data: report,
-                ttlDays,
-              });
+            reportArtifact = await this.artifactStorage.storeJson({
+              scanId: scan.id,
+              engineRunId: networkRun.id,
+              artifactType: 'network_report',
+              data: report,
+              ttlDays,
+            });
 
             const heartbeat = heartbeats.get('network');
 
@@ -467,8 +385,7 @@ export class ScanOrchestratorService {
               throw new Error('ENGINE_LEASE_LOST');
             }
 
-            const chromeVersion =
-              await session.browser.version();
+            const chromeVersion = await session.browser.version();
 
             await this.scanResultsRepository.saveNetwork({
               scanId: scan.id,
@@ -480,26 +397,16 @@ export class ScanOrchestratorService {
               startedAt,
               finishedAt,
               observationDurationMs: this.observationMs,
-              report: report as unknown as Record<
-                string,
-                unknown
-              >,
-              artifacts: [
-                netLogArtifact,
-                reportArtifact,
-              ],
+              report: report as unknown as Record<string, unknown>,
+              artifacts: [netLogArtifact, reportArtifact],
             });
 
             completed.add('network');
           } catch (error: unknown) {
             await Promise.all([
-              this.artifactStorage.remove(
-                netLogArtifact.storageKey,
-              ),
+              this.artifactStorage.remove(netLogArtifact.storageKey),
               reportArtifact
-                ? this.artifactStorage.remove(
-                    reportArtifact.storageKey,
-                  )
+                ? this.artifactStorage.remove(reportArtifact.storageKey)
                 : Promise.resolve(),
             ]);
 
@@ -512,23 +419,16 @@ export class ScanOrchestratorService {
     } catch (error: unknown) {
       for (const run of runs) {
         if (!completed.has(run.engineType)) {
-          failures.set(
-            run.engineType,
-            this.toError(error),
-          );
+          failures.set(run.engineType, this.toError(error));
         }
       }
     } finally {
       if (session) {
         if (!browserClosed) {
-          await this.browserRunner
-            .close(session)
-            .catch(() => undefined);
+          await this.browserRunner.close(session).catch(() => undefined);
         }
 
-        await this.browserRunner
-          .cleanup(session)
-          .catch(() => undefined);
+        await this.browserRunner.cleanup(session).catch(() => undefined);
       }
 
       for (const heartbeat of heartbeats.values()) {
@@ -561,29 +461,22 @@ export class ScanOrchestratorService {
     }
   }
 
-  // --------------------------------------------------
-  // Engine claiming and leases
-  // --------------------------------------------------
-
   private async claimEngineRun(
     scanId: string,
     engineType: ScanEngineType,
   ): Promise<EngineClaimResult> {
     return this.drizzle.db.transaction(async (tx) => {
-      const current =
-        await this.workflowRepository.findScanEngineRun(
-          scanId,
-          engineType,
-          tx,
-        );
+      const current = await this.workflowRepository.findScanEngineRun(
+        scanId,
+        engineType,
+        tx,
+      );
 
       if (!current) {
-        throw new Error(
-          `Missing engine run: ${engineType}`,
-        );
+        throw new Error(`Missing engine run: ${engineType}`);
       }
 
-      if (current.status === 'succeeded') {
+      if (current.status === 'completed') {
         return { status: 'succeeded' };
       }
 
@@ -611,16 +504,15 @@ export class ScanOrchestratorService {
         return { status: 'exhausted' };
       }
 
-      const run =
-        await this.workflowRepository.claimScanEngineRun(
-          {
-            scanId,
-            engineType,
-            maxAttempts: this.maxAttempts,
-            leaseDurationMs: ENGINE_LEASE_MS,
-          },
-          tx,
-        );
+      const run = await this.workflowRepository.claimScanEngineRun(
+        {
+          scanId,
+          engineType,
+          maxAttempts: this.maxAttempts,
+          leaseDurationMs: ENGINE_LEASE_MS,
+        },
+        tx,
+      );
 
       if (!run) {
         throw new Error('ENGINE_LEASE_BUSY');
@@ -645,20 +537,17 @@ export class ScanOrchestratorService {
       const claimedRuns: ClaimedEngineRun[] = [];
 
       for (const engineType of engineTypes) {
-        const current =
-          await this.workflowRepository.findScanEngineRun(
-            scanId,
-            engineType,
-            tx,
-          );
+        const current = await this.workflowRepository.findScanEngineRun(
+          scanId,
+          engineType,
+          tx,
+        );
 
         if (!current) {
-          throw new Error(
-            `Missing engine run: ${engineType}`,
-          );
+          throw new Error(`Missing engine run: ${engineType}`);
         }
 
-        if (current.status === 'succeeded') {
+        if (current.status === 'completed') {
           continue;
         }
 
@@ -686,16 +575,15 @@ export class ScanOrchestratorService {
           continue;
         }
 
-        const run =
-          await this.workflowRepository.claimScanEngineRun(
-            {
-              scanId,
-              engineType,
-              maxAttempts: this.maxAttempts,
-              leaseDurationMs: ENGINE_LEASE_MS,
-            },
-            tx,
-          );
+        const run = await this.workflowRepository.claimScanEngineRun(
+          {
+            scanId,
+            engineType,
+            maxAttempts: this.maxAttempts,
+            leaseDurationMs: ENGINE_LEASE_MS,
+          },
+          tx,
+        );
 
         if (!run || !run.lockToken) {
           throw new Error('ENGINE_LEASE_BUSY');
@@ -726,14 +614,13 @@ export class ScanOrchestratorService {
             return;
           }
 
-          const renewed = await this.drizzle.db.transaction(
-            (tx) =>
-              this.workflowRepository.renewScanEngineRunLease(
-                run.id,
-                lockToken,
-                ENGINE_LEASE_MS,
-                tx,
-              ),
+          const renewed = await this.drizzle.db.transaction((tx) =>
+            this.workflowRepository.renewScanEngineRunLease(
+              run.id,
+              lockToken,
+              ENGINE_LEASE_MS,
+              tx,
+            ),
           );
 
           if (!renewed) {
@@ -760,9 +647,7 @@ export class ScanOrchestratorService {
     };
   }
 
-  private async markEngineFailed(
-    run: ClaimedEngineRun,
-  ): Promise<void> {
+  private async markEngineFailed(run: ClaimedEngineRun): Promise<void> {
     const marked = await this.drizzle.db.transaction((tx) =>
       this.workflowRepository.markScanEngineRunFailed(
         run.id,
@@ -780,10 +665,6 @@ export class ScanOrchestratorService {
     }
   }
 
-  // --------------------------------------------------
-  // Persistence helpers
-  // --------------------------------------------------
-
   private async saveJsonEngineResult(input: {
     scan: ScanRecord;
     engineRunId: string;
@@ -791,14 +672,11 @@ export class ScanOrchestratorService {
     artifactType: ArtifactType;
     report: unknown;
     ttlDays: number;
-    heartbeat:
-      | ReturnType<typeof this.startLeaseHeartbeat>
-      | undefined;
+    heartbeat: LeaseHeartbeat | undefined;
   }): Promise<void> {
     if (input.heartbeat?.hasLost()) {
       throw new Error('ENGINE_LEASE_LOST');
     }
-
     const artifact = await this.artifactStorage.storeJson({
       scanId: input.scan.id,
       engineRunId: input.engineRunId,
@@ -822,24 +700,15 @@ export class ScanOrchestratorService {
       throw error;
     }
   }
-
-  // --------------------------------------------------
-  // Scan finalization
-  // --------------------------------------------------
-
   private async failScan(scan: ScanRecord): Promise<void> {
     await this.drizzle.db.transaction(async (tx) => {
-      const released =
-        await this.workflowRepository.releasePageCycleSlot(
-          scan.slotId,
-          tx,
-        );
+      const released = await this.workflowRepository.releasePageCycleSlot(
+        scan.slotId,
+        tx,
+      );
 
       if (released) {
-        await this.accessService.releasePageQuota(
-          scan.cycleId,
-          tx,
-        );
+        await this.accessService.releasePageQuota(scan.cycleId, tx);
       }
 
       await this.workflowRepository.markScanFailed(
@@ -855,18 +724,13 @@ export class ScanOrchestratorService {
 
   private async completeScan(scanId: string): Promise<void> {
     await this.drizzle.db.transaction(async (tx) => {
-      const completed =
-        await this.workflowRepository.markScanCompleted(
-          scanId,
-          tx,
-        );
+      const completed = await this.workflowRepository.markScanCompleted(
+        scanId,
+        tx,
+      );
 
       if (!completed) {
-        const scan =
-          await this.workflowRepository.findScanById(
-            scanId,
-            tx,
-          );
+        const scan = await this.workflowRepository.findScanById(scanId, tx);
 
         if (scan?.status !== 'completed') {
           throw new Error('Unable to complete scan.');
@@ -874,18 +738,11 @@ export class ScanOrchestratorService {
       }
     });
   }
-
-  // --------------------------------------------------
-  // Utilities
-  // --------------------------------------------------
-
   private getRun(
     runs: ClaimedEngineRun[],
     engineType: ScanEngineType,
   ): ClaimedEngineRun {
-    const run = runs.find(
-      (item) => item.engineType === engineType,
-    );
+    const run = runs.find((item) => item.engineType === engineType);
 
     if (!run) {
       throw new Error(`Engine run not claimed: ${engineType}`);
@@ -894,9 +751,7 @@ export class ScanOrchestratorService {
     return run;
   }
 
-  private requireLockToken(
-    run: ClaimedEngineRun,
-  ): string {
+  private requireLockToken(run: ClaimedEngineRun): string {
     if (!run.lockToken) {
       throw new Error('Engine lock token is missing.');
     }
@@ -905,16 +760,11 @@ export class ScanOrchestratorService {
   }
 
   private toError(error: unknown): Error {
-    return error instanceof Error
-      ? error
-      : new Error(String(error));
+    return error instanceof Error ? error : new Error(String(error));
   }
 
   private async waitBeforeRetry(attempt: number): Promise<void> {
-    const delayMs = Math.min(
-      10_000,
-      500 * 2 ** Math.max(0, attempt - 1),
-    );
+    const delayMs = Math.min(10_000, 500 * 2 ** Math.max(0, attempt - 1));
 
     await this.delay(delayMs);
   }

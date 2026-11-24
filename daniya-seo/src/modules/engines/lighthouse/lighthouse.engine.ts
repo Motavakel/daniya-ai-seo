@@ -11,11 +11,29 @@ export class LighthouseEngine {
     let chrome:
       | {
           port: number;
-          kill: () => Promise<void>;
+          kill: () => void;
         }
       | undefined;
 
     try {
+      let url: URL;
+
+      try {
+        url = new URL(targetUrl);
+      } catch {
+        throw new Error('Invalid target URL.');
+      }
+
+      if (url.protocol !== 'https:') {
+        throw new Error('Only HTTPS URLs are supported.');
+      }
+
+      if (url.username || url.password) {
+        throw new Error(
+          'URLs with embedded credentials are not allowed.',
+        );
+      }
+
       const chromeLauncher = await import('chrome-launcher');
       const lighthouseModule = await import('lighthouse');
 
@@ -27,18 +45,36 @@ export class LighthouseEngine {
 
       const chromePath = this.config.get<string>('CHROME_PATH');
 
-      chrome = await chromeLauncher.launch({
+      const launchedChrome = await chromeLauncher.launch({
         ...(chromePath ? { chromePath } : {}),
         chromeFlags,
         handleSIGINT: false,
         logLevel: 'error',
       });
 
-      const result = await lighthouseModule.default(targetUrl, {
-        port: chrome.port,
-        output: 'json',
-        logLevel: 'error',
-      });
+      chrome = launchedChrome;
+
+      const result = await lighthouseModule.default(
+        targetUrl,
+        {
+          port: launchedChrome.port,
+          output: 'json',
+          logLevel: 'error',
+        },
+        {
+          extends: 'lighthouse:default',
+          settings: {
+            formFactor: 'mobile',
+            screenEmulation: {
+              width: 390,
+              height: 844,
+              deviceScaleFactor: 3,
+              mobile: true,
+              disabled: false,
+            },
+          },
+        },
+      );
 
       if (!result) {
         throw new Error('Lighthouse did not return a report.');
@@ -60,7 +96,7 @@ export class LighthouseEngine {
     } finally {
       if (chrome) {
         try {
-          await chrome.kill();
+          chrome.kill();
         } catch (error: unknown) {
           const message =
             error instanceof Error ? error.message : String(error);

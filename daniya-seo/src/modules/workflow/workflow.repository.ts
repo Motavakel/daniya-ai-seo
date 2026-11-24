@@ -1,15 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  and,
-  asc,
-  eq,
-  gt,
-  gte,
-  lt,
-  lte,
-  or,
-  sql,
-} from 'drizzle-orm';
+import { and, asc, eq, gt, gte, lt, lte, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { randomUUID } from 'node:crypto';
 
@@ -89,11 +79,7 @@ export class WorkflowRepository {
   // Pages
   // --------------------------------------------------
 
-  async findPage(
-    customerId: string,
-    normalizedUrl: string,
-    tx: DbTransaction,
-  ) {
+  async findPage(customerId: string, normalizedUrl: string, tx: DbTransaction) {
     const [page] = await tx
       .select()
       .from(pages)
@@ -128,11 +114,7 @@ export class WorkflowRepository {
       return createdPage;
     }
 
-    const existingPage = await this.findPage(
-      customerId,
-      normalizedUrl,
-      tx,
-    );
+    const existingPage = await this.findPage(customerId, normalizedUrl, tx);
 
     if (!existingPage) {
       throw new Error('Unable to resolve page.');
@@ -145,10 +127,7 @@ export class WorkflowRepository {
   // Plan cycle locking
   // --------------------------------------------------
 
-  async lockPlanCycle(
-    cycleId: string,
-    tx: DbTransaction,
-  ) {
+  async lockPlanCycle(cycleId: string, tx: DbTransaction) {
     const [cycle] = await tx
       .select({
         id: customerPlanCycles.id,
@@ -165,11 +144,7 @@ export class WorkflowRepository {
   // Page cycle slots
   // --------------------------------------------------
 
-  async findPageCycleSlot(
-    pageId: string,
-    cycleId: string,
-    tx: DbTransaction,
-  ) {
+  async findPageCycleSlot(pageId: string, cycleId: string, tx: DbTransaction) {
     const [slot] = await tx
       .select()
       .from(pageCycleSlots)
@@ -202,10 +177,7 @@ export class WorkflowRepository {
     return slot;
   }
 
-  async reReservePageCycleSlot(
-    slotId: string,
-    tx: DbTransaction,
-  ) {
+  async reReservePageCycleSlot(slotId: string, tx: DbTransaction) {
     const [slot] = await tx
       .update(pageCycleSlots)
       .set({
@@ -278,22 +250,13 @@ export class WorkflowRepository {
   // Scans
   // --------------------------------------------------
 
-  async createScan(
-    input: typeof scans.$inferInsert,
-    tx: DbTransaction,
-  ) {
-    const [scan] = await tx
-      .insert(scans)
-      .values(input)
-      .returning();
+  async createScan(input: typeof scans.$inferInsert, tx: DbTransaction) {
+    const [scan] = await tx.insert(scans).values(input).returning();
 
     return scan;
   }
 
-  async findScanById(
-    scanId: string,
-    tx: DbTransaction,
-  ) {
+  async findScanById(scanId: string, tx: DbTransaction) {
     const [scan] = await tx
       .select()
       .from(scans)
@@ -303,10 +266,7 @@ export class WorkflowRepository {
     return scan ?? null;
   }
 
-  async findScanByIdForUpdate(
-    scanId: string,
-    tx: DbTransaction,
-  ) {
+  async findScanByIdForUpdate(scanId: string, tx: DbTransaction) {
     const [scan] = await tx
       .select()
       .from(scans)
@@ -333,10 +293,7 @@ export class WorkflowRepository {
     return (result?.maxAttemptNo ?? 0) + 1;
   }
 
-  async markScanRunning(
-    scanId: string,
-    tx: DbTransaction,
-  ): Promise<boolean> {
+  async markScanRunning(scanId: string, tx: DbTransaction): Promise<boolean> {
     const now = new Date();
 
     const [scan] = await tx
@@ -346,12 +303,7 @@ export class WorkflowRepository {
         startedAt: now,
         updatedAt: now,
       })
-      .where(
-        and(
-          eq(scans.id, scanId),
-          eq(scans.status, 'queued'),
-        ),
-      )
+      .where(and(eq(scans.id, scanId), eq(scans.status, 'queued')))
       .returning({
         id: scans.id,
       });
@@ -359,10 +311,7 @@ export class WorkflowRepository {
     return Boolean(scan);
   }
 
-  async markScanCompleted(
-    scanId: string,
-    tx: DbTransaction,
-  ): Promise<boolean> {
+  async markScanCompleted(scanId: string, tx: DbTransaction): Promise<boolean> {
     const now = new Date();
 
     const [scan] = await tx
@@ -374,12 +323,7 @@ export class WorkflowRepository {
         failureMessage: null,
         updatedAt: now,
       })
-      .where(
-        and(
-          eq(scans.id, scanId),
-          eq(scans.status, 'running'),
-        ),
-      )
+      .where(and(eq(scans.id, scanId), eq(scans.status, 'running')))
       .returning({
         id: scans.id,
       });
@@ -404,12 +348,7 @@ export class WorkflowRepository {
         failureMessage: errorMessage,
         updatedAt: now,
       })
-      .where(
-        and(
-          eq(scans.id, scanId),
-          eq(scans.status, 'running'),
-        ),
-      )
+      .where(and(eq(scans.id, scanId), eq(scans.status, 'running')))
       .returning({
         id: scans.id,
       });
@@ -441,10 +380,7 @@ export class WorkflowRepository {
       .returning();
   }
 
-  async findScanEngineRuns(
-    scanId: string,
-    tx: DbTransaction,
-  ) {
+  async findScanEngineRuns(scanId: string, tx: DbTransaction) {
     return tx
       .select()
       .from(scanEngineRuns)
@@ -500,9 +436,7 @@ export class WorkflowRepository {
         startedAt: now,
         completedAt: null,
         lockToken,
-        leaseExpiresAt: new Date(
-          now.getTime() + input.leaseDurationMs,
-        ),
+        leaseExpiresAt: new Date(now.getTime() + input.leaseDurationMs),
         errorCode: null,
         errorMessage: null,
         updatedAt: now,
@@ -533,10 +467,7 @@ export class WorkflowRepository {
     leaseDurationMs: number,
     tx: DbTransaction,
   ): Promise<boolean> {
-    if (
-      !Number.isInteger(leaseDurationMs) ||
-      leaseDurationMs < 1_000
-    ) {
+    if (!Number.isInteger(leaseDurationMs) || leaseDurationMs < 1_000) {
       throw new Error('Invalid engine lease duration.');
     }
 
@@ -545,9 +476,7 @@ export class WorkflowRepository {
     const [run] = await tx
       .update(scanEngineRuns)
       .set({
-        leaseExpiresAt: new Date(
-          now.getTime() + leaseDurationMs,
-        ),
+        leaseExpiresAt: new Date(now.getTime() + leaseDurationMs),
         updatedAt: now,
       })
       .where(
@@ -575,7 +504,7 @@ export class WorkflowRepository {
     const [run] = await tx
       .update(scanEngineRuns)
       .set({
-        status: 'succeeded',
+        status: 'completed',
         completedAt: now,
         lockToken: null,
         leaseExpiresAt: null,
@@ -648,8 +577,7 @@ export class WorkflowRepository {
         lockToken: null,
         leaseExpiresAt: null,
         errorCode: 'ENGINE_ATTEMPTS_EXHAUSTED',
-        errorMessage:
-          'Engine execution lease expired after maximum attempts.',
+        errorMessage: 'Engine execution lease expired after maximum attempts.',
         updatedAt: now,
       })
       .where(
@@ -671,10 +599,7 @@ export class WorkflowRepository {
   // Outbox
   // --------------------------------------------------
 
-  async createOutboxEvent(
-    scanId: string,
-    tx: DbTransaction,
-  ) {
+  async createOutboxEvent(scanId: string, tx: DbTransaction) {
     const [event] = await tx
       .insert(outboxEvents)
       .values({
@@ -689,11 +614,7 @@ export class WorkflowRepository {
     return event;
   }
 
-  async claimOutboxEvents(
-    limit: number,
-    staleBefore: Date,
-    tx: DbTransaction,
-  ) {
+  async claimOutboxEvents(limit: number, staleBefore: Date, tx: DbTransaction) {
     const now = new Date();
 
     const events = await tx
@@ -805,5 +726,19 @@ export class WorkflowRepository {
       });
 
     return Boolean(event);
+  }
+
+  async findScanByIdForCustomer(
+    scanId: string,
+    customerId: string,
+    tx: DbTransaction,
+  ) {
+    const [scan] = await tx
+      .select()
+      .from(scans)
+      .where(and(eq(scans.id, scanId), eq(scans.customerId, customerId)))
+      .limit(1);
+
+    return scan ?? null;
   }
 }

@@ -1,17 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-
 import { DrizzleService } from '../../infrastructure/database/drizzle.service';
-
 import {
   scans,
   pages,
   pageCycleSlots,
   scanEngineRuns,
-  lighthouseReports,
   networkRuns,
-  reportArtifacts,
+  lighthouseRuns,
 } from '../../infrastructure/database/schema';
+import { reportArtifacts } from '../../infrastructure/database/schema/workflow/report-artifacts.schema';
 
 @Injectable()
 export class ReportsRepository {
@@ -64,8 +62,8 @@ export class ReportsRepository {
   async findLighthouseReport(scanId: string) {
     const [report] = await this.drizzle.db
       .select()
-      .from(lighthouseReports)
-      .where(eq(lighthouseReports.scanId, scanId))
+      .from(lighthouseRuns)
+      .where(eq(lighthouseRuns.scanId, scanId))
       .limit(1);
 
     return report ?? null;
